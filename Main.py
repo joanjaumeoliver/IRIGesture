@@ -1,4 +1,4 @@
 from pathlib import Path
-from IRIDataset import IRIGesture
+from dataset.IRIDataset import IRIGesture
 
-dataset = IRIGesture(Path.joinpath(Path().absolute(),"dataset"))
+dataset = IRIGesture(Path().absolute())
