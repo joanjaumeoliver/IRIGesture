@@ -15,10 +15,8 @@ from torch_geometric.data import (InMemoryDataset, Data)
 
 class IRIGesture(InMemoryDataset):
     r"""The IRIGesture dataset
-
     .. note::
         TO DO
-
     Args:
         root (string): Root directory where the dataset should be saved.
         token (string, optional): GitHub token needed in order to download 
@@ -113,31 +111,40 @@ class IRIGesture(InMemoryDataset):
         data_list = []
         
         # We create an extremly connected graph.
-        CCO = [[i,j] for i in range(0, len(self.__categories) - 1) for j in range(0, len(self.__categories) - 1)]
+        CCO = np.swapaxes([[i,j] for i in range(0, 33) for j in range(0, 33)], 0, 1)
         
         for gesture in self.__categories:
             paths = glob.glob(os.path.join(self.raw_dir, f'*{gesture}*.npy'))
             paths = sorted(paths, key=lambda e: (len(e), e))
 
             for path in paths:
-                pose = np.load(path, allow_pickle=True)[-1,][0]
+                gesture_seq = np.load(path, allow_pickle=True)
+                number_of_frames = gesture_seq.shape[0]
 
-                x = []
-                # There's 33 landmarks to take into account.
-                for landmark in range(0,33):
-                    x.append([pose.landmark[landmark].x, pose.landmark[landmark].y, 
-                              pose.landmark[landmark].z, pose.landmark[landmark].visibility])
-                    
+                x = np.empty([33,4,0])
+                #for frame in range(0,number_of_frames):
+                for frame in range(0, 10):
+                    pose = gesture_seq[frame,][0]
+                    frame_landmark = np.empty([0,4])
+
+                    # There's 33 landmarks to take into account.
+                    for landmark in range(0,33):
+                        frame_landmark = np.append(frame_landmark, np.expand_dims([pose.landmark[landmark].x, pose.landmark[landmark].y, pose.landmark[landmark].z, pose.landmark[landmark].visibility], axis = 0), axis=0)
+
+                    x = np.append(x,  np.expand_dims(frame_landmark, axis = 2), axis = 2)
+
+                x = np.swapaxes(np.swapaxes(x, 0, 2), 1, 2)
                 x = torch.tensor(x, dtype=torch.float)
+
                 edge_index = torch.tensor(CCO)
                 y = torch.tensor(self.__categories.index(gesture))
                 
                 data = Data(x=x, edge_index=edge_index, edge_attr=None, y=y)
                 if self.pre_filter is not None and not self.pre_filter(data):
-                    continue
+                  continue
                 if self.pre_transform is not None:
-                    data = self.pre_transform(data)
-                    
+                  data = self.pre_transform(data)
+
                 data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])
