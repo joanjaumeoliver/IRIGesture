@@ -120,7 +120,7 @@ for epoch in range(30):
             print("Loss = " + str(sum(loss_list)/len(loss_list)))
             print("Acc = " + str(sum(acc_list)/len(acc_list)))
     print("Epoch {} train CrossEntropyLoss: {:.4f} Acc: {:.4f}".format(epoch, sum(loss_list)/len(loss_list), sum(acc_list)/len(acc_list)))
-    torch.save(model.state_dict(), "C:\_Projects\IRIGesture\checkpoints\epoch_"+str(epoch)+".pth")
+    torch.save(model.state_dict(), "C:\_Projects\IRIGesture\A3TGCN2_Checkpoints\Epoch_"+str(epoch)+".pth")
 
 
 ## Evaluation
