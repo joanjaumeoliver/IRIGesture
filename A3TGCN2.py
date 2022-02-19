@@ -134,11 +134,11 @@ for encoder_inputs, labels in test_loader:
     # Get model predictions
     y_hat = model(encoder_inputs, static_edge_index)
     # Mean squared error
-    loss = loss_fn(y_hat, labels)
+    loss = loss_fn(y_hat.float(), labels.long())
     total_loss.append(loss.item())
     
     corrects = torch.flatten((torch.argmax(y_hat, dim = 1) == labels).float())
     acc = corrects.sum()/len(corrects)
-    acc_list.append(acc.numpy())
+    total_acc.append(acc.numpy())
     
 print("Test CrossEntropyLoss: {:.4f} Acc: {:.4f}".format(sum(total_loss)/len(total_loss), sum(total_acc)/len(total_acc)))
