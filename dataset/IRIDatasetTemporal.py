@@ -51,17 +51,21 @@ class IRIGestureTemporal(InMemoryDataset):
     __repo = "GESTURE-PROJECT"
     __serverPath = "dataset/BodyGestureDataset"
     __categories = ['attention', 'right', 'left', 'stop', 'yes', 'shrug', 'random', 'static']
+    __categoriesDynamic = ['greeting', 'continue', 'turnback', 'no', 'slowdown', 'come', 'back']
     __token = os.environ.get("GITHUB_TOKEN", None)
+    __processed = False
         
     def __init__(self, root, dataTypes = "Static", token=None, categories=None,
                  transform=None, pre_transform=None, pre_filter=None):
         
         if dataTypes == "Dynamic":
-            self.StaticData = True
-            self.DynamicData = False
-        else:
             self.StaticData = False
             self.DynamicData = True
+        else:
+            self.StaticData = True
+            self.DynamicData = False
+        
+        self.dataTypes = dataTypes
         
         token = self.__token if token is None else token
         self.__token = token
@@ -70,21 +74,34 @@ class IRIGestureTemporal(InMemoryDataset):
             categories = [gestures.lower() for gestures in categories]
             for gestures in categories:
                 assert gestures in self.__categories
-            self.__categories = categories 
+            self.__categories = categories
+        else:
+            if self.DynamicData:
+                self.__categories = self.__categoriesDynamic
         
         super().__init__(root, transform, pre_transform, pre_filter)
-        self.data, self.slices = torch.load(self.processed_paths[0])
+        self.data, self.slices = torch.load(self.processed_paths[0])        
+        
+        if not self.__processed:
+            self.features =  torch.load(os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_feat.pt'))
+            self.targets =  torch.load(os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_trgs.pt'))
+            self.CCO = torch.load(os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_CCO.pt'))
+            self.__totalElements = torch.load(os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_tels.pt'))
 
     @property
     def raw_file_names(self):
         # We look for two random files in order to decide if dataset needs to be downloaded.
-        return ['S1_attention_1_1m_upper.npy', 'S6_stop_2_4m_full.npy']
+        if self.StaticData:
+            return ['S1_attention_1_1m_upper.npy', 'S6_stop_2_4m_full.npy']
+        else:
+            return ['S1_continue_3_6m_full.npy', 'S10_turnback_1_1m_upper.npy']
+
 
     @property
     def processed_file_names(self):
         # We generate a *.pt file with name composition of each gesture.
         name = '_'.join([gesture[:2] for gesture in self.__categories])
-        return f'{name}.pt'
+        return f'{self.dataTypes[:3]}_{name}.pt'
 
     def download(self):
         git = Github(self.__token)
@@ -131,7 +148,8 @@ class IRIGestureTemporal(InMemoryDataset):
             for path in paths:
                 gesture_seq = np.load(path, allow_pickle=True)
                 number_of_frames = gesture_seq.shape[0]
-
+                number_of_frames = 18 #Temp bugfix
+                
                 x = np.empty([33,4,0])
                 for frame in range(0, number_of_frames):
                     pose = gesture_seq[frame,][0]
@@ -167,16 +185,16 @@ class IRIGestureTemporal(InMemoryDataset):
                 data_list.append(data)
 
         torch.save(self.collate(data_list), self.processed_paths[0])
-        
+        torch.save(self.features, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_feat.pt'))
+        torch.save(self.targets, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_trgs.pt'))
+        torch.save(self.CCO, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_CCO.pt'))
+                           
         self.__totalElements = len(data_list)
+        torch.save(self.__totalElements, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_tels.pt'))
         
-    def getTemporalDataset(self) -> object:
-        if self.DynamicData:
-            return self.__getDynamicTemporalDataset
-        else:
-            return self.__getStaticTemporalDataset
+        self.__processed = True
         
-    def __getDynamicTemporalDataset(self) -> DynamicGraphTemporalSignal:
+    def getDynamicTemporalDataset(self) -> DynamicGraphTemporalSignal:
         """Returning the IRIGesture data iterator.
 
         Args types:
@@ -184,17 +202,20 @@ class IRIGestureTemporal(InMemoryDataset):
         Return types:
             * **dataset** *(DynamicGraphTemporalSignal)* - The IRIGestureTemporal dataset.
         """      
-        self._get_edges() #List of CCO [2, 1089]
-        self._get_edge_weights() #List of ones (1089, )
-        #self.features() # List each item (4, 33, frames)
-        #self.targets() #List each item (frames, gestures)
+        if self.DynamicData:
+            self._get_edges() #List of CCO [2, 1089]
+            self._get_edge_weights() #List of ones (1089, )
+            #self.features() # List each item (4, 33, frames)
+            #self.targets() #List each item (frames, gestures)
 
-        dataset = DynamicGraphTemporalSignal(
-            self._edges, self._edge_weights, self.features, self.targets
-        )
-        return dataset
+            dataset = DynamicGraphTemporalSignal(
+                self._edges, self._edge_weights, self.features, self.targets
+            )
+            return dataset
+        else:
+            raise Exception("Please use getStaticTemporalDataset()")
         
-    def __getStaticTemporalDataset(self) -> StaticGraphTemporalSignal:
+    def getStaticTemporalDataset(self) -> StaticGraphTemporalSignal:
         """Returning the IRIGesture data iterator.
 
         Args types:
@@ -202,15 +223,18 @@ class IRIGestureTemporal(InMemoryDataset):
         Return types:
             * **dataset** *(StaticGraphTemporalSignal)* - The IRIGestureTemporal dataset.
         """      
-        self._get_edges() #CCO [2, 1089]
-        self._get_edge_weights() #Ones (1089, )
-        #self.features() # List each item (4, 33, frames)
-        #self.targets() #List each item (frames, gestures)
-        
-        dataset = StaticGraphTemporalSignal(
-            self._edges, self._edge_weights, self.features, self.targets
-        )
-        return dataset
+        if self.StaticData:
+            self._get_edges() #CCO [2, 1089]
+            self._get_edge_weights() #Ones (1089, )
+            #self.features() # List each item (4, 33, frames)
+            #self.targets() #List each item (frames, gestures)
+            
+            dataset = StaticGraphTemporalSignal(
+                self._edges, self._edge_weights, self.features, self.targets
+            )
+            return dataset
+        else:
+            raise Exception("Please use getDynamicTemporalDataset()")
     
     def _get_edges(self):
         if self.DynamicData:
