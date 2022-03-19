@@ -116,7 +116,7 @@ class IRIGesture(InMemoryDataset):
         for gesture in self.__categories:
             paths = glob.glob(os.path.join(self.raw_dir, f'*{gesture}*.npy'))
             paths = sorted(paths, key=lambda e: (len(e), e))
-
+            
             for path in paths:
                 gesture_seq = np.load(path, allow_pickle=True)
                 number_of_frames = gesture_seq.shape[0]
@@ -134,10 +134,10 @@ class IRIGesture(InMemoryDataset):
                     x = np.append(x,  np.expand_dims(frame_landmark, axis = 2), axis = 2)
 
                 x = np.swapaxes(np.swapaxes(x, 0, 2), 1, 2)
-                x = torch.tensor(x, dtype=torch.float)
+                x = torch.tensor(x, dtype=torch.float) #[number_of_frames, 33, 4]
 
-                edge_index = torch.tensor(CCO)
-                y = torch.tensor(self.__categories.index(gesture))
+                edge_index = torch.tensor(CCO) #[2, 1089]
+                y = torch.tensor(self.__categories.index(gesture)) #[]
                 
                 data = Data(x=x, edge_index=edge_index, edge_attr=None, y=y)
                 if self.pre_filter is not None and not self.pre_filter(data):
