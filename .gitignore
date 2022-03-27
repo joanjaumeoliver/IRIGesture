@@ -7,6 +7,8 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+runs/
+checkpoints/
 .idea/
 .Python
 build/
