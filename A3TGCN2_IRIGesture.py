@@ -1,17 +1,70 @@
-from dataclasses import dataclass
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+import keyboard
 import os
 
 import torch
-import torch.nn.functional as F
+import torch.nn.functional
 from pathlib import Path
 from torch_geometric_temporal.nn.recurrent import A3TGCN2
-from torch_geometric_temporal.nn.attention import GMAN
+# from torch_geometric_temporal.nn.attention import GMAN
 from torch.utils.tensorboard import SummaryWriter
 
 from dataset.IRIDatasetTemporal import IRIGestureTemporal
+
+
+def train(TensorBoardEnabled):
+    step = 0
+    loss_list = []
+    acc_list = []
+    for encoder_inputs, labels in train_loader:
+        y_hat = model(encoder_inputs, static_edge_index, static_weight_index)  # Get model predictions
+        loss = loss_fn(y_hat.float(), labels.long())
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        step = step + 1
+        loss_list.append(loss.item())
+
+        corrects = torch.flatten((torch.argmax(y_hat, dim=1) == labels).float())
+        acc = corrects.sum() / len(corrects)
+        acc_list.append(acc.numpy())
+
+        if step % 25 == 0:
+            print("Loss = " + str(sum(loss_list) / len(loss_list)))
+            print("Acc = " + str(sum(acc_list) / len(acc_list)))
+    print("Epoch {} train CrossEntropyLoss: {:.4f} Acc: {:.4f}".format(epoch, sum(loss_list) / len(loss_list),
+                                                                       sum(acc_list) / len(acc_list)))
+    if TensorBoardEnabled:
+        writer.add_scalar('Loss/Train', sum(loss_list) / len(loss_list), epoch)
+        writer.add_scalar('Accuracy/Train', sum(acc_list) / len(acc_list), epoch)
+    torch.save(model.state_dict(), os.path.join(Path().absolute(), 'checkpoints', 'A3TGCN2_Checkpoints',
+                                                'Epoch_' + str(epoch) + '.pth'))
+
+
+def test(TensorBoardEnabled):
+    model.eval()
+    step = 0
+    # Store for analysis
+    total_loss = []
+    total_acc = []
+    for encoder_inputs, labels in test_loader:
+        # Get model predictions
+        y_hat = model(encoder_inputs, static_edge_index, static_weight_index)
+        # Mean squared error
+        loss = loss_fn(y_hat.float(), labels.long())
+        total_loss.append(loss.item())
+
+        corrects = torch.flatten((torch.argmax(y_hat, dim=1) == labels).float())
+        acc = corrects.sum() / len(corrects)
+        total_acc.append(acc.numpy())
+
+    print("Test CrossEntropyLoss: {:.4f} Acc: {:.4f}".format(sum(total_loss) / len(total_loss),
+                                                             sum(total_acc) / len(total_acc)))
+    if TensorBoardEnabled:
+        writer.add_scalar('Loss/Test', sum(total_loss) / len(total_loss), step)
+        writer.add_scalar('Accuracy/Test', sum(total_acc) / len(total_acc), step)
+        #writer.add_video(tag, vid_tensor, global_step=step, fps=4)
+
 
 seed = 1997
 np.random.seed(seed)
@@ -24,7 +77,7 @@ DEVICE = torch.device('cpu')
 shuffle = True
 batch_size = 32
 
-loader = IRIGestureTemporal(os.path.join(Path().absolute(), 'dataset'))
+loader = IRIGestureTemporal(os.path.join(Path().absolute(), 'dataset'), alsoDownloadVideos=True)
 dataset = loader.getAllDataset()
 train_dataset, test_dataset = loader.getDataset()
 # n frames
@@ -60,13 +113,14 @@ test_loader = torch.utils.data.DataLoader(test_dataset_new, batch_size=batch_siz
 
 
 # Making the model 
-class AttentionGAT(torch.nn.Module):
+class AttentionGCN(torch.nn.Module):
     def __init__(self, node_features, number_nodes, number_targets, periods, batch_size):
-        super(AttentionGAT, self).__init__()
+        super(AttentionGCN, self).__init__()
         # Attention Temporal Graph Convolutional Cell
         self.tgnn = A3TGCN2(in_channels=node_features, out_channels=32, periods=periods,
                             batch_size=batch_size)  # node_features=21, periods=16
         # Equals single-shot prediction
+        self.F = torch.nn.functional
         self.linear = torch.nn.Linear(32, periods)
         self.softmax = torch.nn.Softmax()
         self.linear2 = torch.nn.Linear(number_nodes, number_targets)
@@ -77,7 +131,7 @@ class AttentionGAT(torch.nn.Module):
         edge_index = Graph edge indices
         """
         h = self.tgnn(x, edge_index, edge_weight)  # x [b=32, 21, 3, 16]  returns h [b=32, 21, 32]
-        h = F.relu(h)
+        h = self.F.relu(h)
         h = self.linear(h)  # Returns h [b=32, 21, 16]
         h = torch.transpose(h, 2, 1)
         h = self.linear2(h)
@@ -88,7 +142,7 @@ class AttentionGAT(torch.nn.Module):
 
 
 # Create model and optimizers
-model = AttentionGAT(node_features=4, number_nodes=loader.number_nodes, number_targets=loader.number_targets,
+model = AttentionGCN(node_features=4, number_nodes=loader.number_nodes, number_targets=loader.number_targets,
                      periods=loader.number_frames, batch_size=batch_size).to(DEVICE)
 # model = GMAN(L=1, K=8, d=8, num_his=12, bn_decay=0.1, steps_per_day= 288, use_bias=True, mask=False)
 # model.load_state_dict(torch.load("C:\_Projects\IRIGesture\A3TGCN2_Checkpoints\Epoch_29.pth"))
@@ -107,59 +161,20 @@ for snapshot in train_dataset:
 # Training the model 
 model.train()
 
-writer = SummaryWriter()
+writer = SummaryWriter(log_dir="ARTGCN2_IRIGesture", comment="Demo comment")
+epoch = 0
 
-for epoch in range(3000):  # (30, 60):
-    step = 0
-    loss_list = []
-    acc_list = []
-    for encoder_inputs, labels in train_loader:
-        y_hat = model(encoder_inputs, static_edge_index, static_weight_index)  # Get model predictions
-        # labels -> [32, 16]
-        # y_hat -> [32, 6, 16]
-        loss = loss_fn(y_hat.float(), labels.long())
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-        step = step + 1
-        loss_list.append(loss.item())
-
-        corrects = torch.flatten((torch.argmax(y_hat, dim=1) == labels).float())
-        acc = corrects.sum() / len(corrects)
-        acc_list.append(acc.numpy())
-
-        if step % 25 == 0:
-            print("Loss = " + str(sum(loss_list) / len(loss_list)))
-            print("Acc = " + str(sum(acc_list) / len(acc_list)))
-    print("Epoch {} train CrossEntropyLoss: {:.4f} Acc: {:.4f}".format(epoch, sum(loss_list) / len(loss_list),
-                                                                       sum(acc_list) / len(acc_list)))
-    writer.add_scalar('Loss/Train', sum(loss_list) / len(loss_list), epoch)
-    writer.add_scalar('Accuracy/Train', sum(acc_list) / len(acc_list), epoch)
-    torch.save(model.state_dict(), os.path.join(Path().absolute(), 'checkpoints', 'A3TGCN2_Checkpoints',
-                                                'Epoch_' + str(epoch) + '.pth'))
-# Evaluation
-
-model.eval()
-step = 0
-# Store for analysis
-total_loss = []
-total_acc = []
-for encoder_inputs, labels in test_loader:
-    # Get model predictions
-    y_hat = model(encoder_inputs, static_edge_index, static_weight_index)
-    # Mean squared error
-    loss = loss_fn(y_hat.float(), labels.long())
-    total_loss.append(loss.item())
-
-    corrects = torch.flatten((torch.argmax(y_hat, dim=1) == labels).float())
-    acc = corrects.sum() / len(corrects)
-    total_acc.append(acc.numpy())
-
-print("Test CrossEntropyLoss: {:.4f} Acc: {:.4f}".format(sum(total_loss) / len(total_loss),
-                                                         sum(total_acc) / len(total_acc)))
-
-writer.add_scalar('Loss/Test', sum(total_loss) / len(total_loss), step)
-writer.add_scalar('Accuracy/Test', sum(total_acc) / len(total_acc), step)
+max_epochs = -5
+while True:
+    if epoch < max_epochs:
+        train(TensorBoardEnabled=True)
+        if epoch % 30:
+            test(TensorBoardEnabled=True)
+        epoch += 1
+    elif input("Do you want to exit?") == 'Yes':
+        break
+    else:
+        max_epochs = int(input("Set new max number of epochs"))
 
 writer.flush()
 writer.close()
