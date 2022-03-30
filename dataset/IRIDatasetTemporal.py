@@ -4,8 +4,10 @@ import glob
 import base64
 import shutil
 from typing import Tuple
-
+import cv2
+import mediapipe as mp
 import numpy as np
+from typing import List, Union
 
 # Imports needed for GitHub dataset downloading.
 from github import Github
@@ -15,6 +17,24 @@ from github import GithubException
 import torch
 from torch_geometric.data import (InMemoryDataset, Data)
 from torch_geometric_temporal.signal import DynamicGraphTemporalSignal
+
+Edge_Indices = List[Union[np.ndarray, None]]
+Edge_Weights = List[Union[np.ndarray, None]]
+Node_Features = List[Union[np.ndarray, None]]
+Targets = List[Union[np.ndarray, None]]
+Additional_Features = List[np.ndarray]
+
+
+class CustomDynamicGraphTemporalSignal(DynamicGraphTemporalSignal):
+    def __init__(self,
+                 videos,
+                 edge_indices: Edge_Indices,
+                 edge_weights: Edge_Weights,
+                 features: Node_Features,
+                 targets: Targets,
+                 **kwargs: Additional_Features):
+        self.videos_paths = videos
+        super(CustomDynamicGraphTemporalSignal, self).__init__(edge_indices, edge_weights, features, targets, **kwargs)
 
 
 class IRIGestureTemporal(InMemoryDataset):
@@ -29,6 +49,7 @@ class IRIGestureTemporal(InMemoryDataset):
         token (string, optional): GitHub token needed in order to download 
             IRIGesture dataset. (By default uses 'GITHUB_TOKEN' environment 
             variable)
+        alsoDownloadVideos (bool, optional): If set to true, videos would also be downloaded from GitHub.
         categories (list, optional): List of categories to include in the
             dataset. Can include the categories :obj:`"attention"`, :obj:`"right"`,
             :obj:`"left"`, :obj:`"stop"`, :obj:`"yes"`, :obj:`"shrug"`,
@@ -59,8 +80,11 @@ class IRIGestureTemporal(InMemoryDataset):
 
     __train_features = []
     __train_targets = []
+    __train_videos = []
+
     __test_targets = []
     __test_features = []
+    __test_videos = []
 
     __nodes_to_use = [0,  # nose
                       # 1,       # left_eye_inner
@@ -102,8 +126,10 @@ class IRIGestureTemporal(InMemoryDataset):
     number_frames = 10
     frames_gap = 5
     __testSubject = 'S2'
+    alsoDownloadVideos = False
 
-    def __init__(self, root, dataTypes="Static", testSubject="S2", token=None, categories=None,
+    def __init__(self, root, dataTypes="Static", testSubject="S2", alsoDownloadVideos=False, token=None,
+                 categories=None,
                  transform=None, pre_transform=None, pre_filter=None):
 
         if dataTypes == "Dynamic":
@@ -115,6 +141,7 @@ class IRIGestureTemporal(InMemoryDataset):
 
         self.dataTypes = dataTypes
         self.__testSubject = testSubject
+        self.alsoDownloadVideos = alsoDownloadVideos
 
         token = self.__token if token is None else token
         self.__token = token
@@ -141,6 +168,8 @@ class IRIGestureTemporal(InMemoryDataset):
             self.__test_targets = torch.load(os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_tstrgs.pt'))
             self.__train_targets = torch.load(os.path.join(self.processed_dir,
                                                            f'{self.dataTypes[:3]}_trtrgs.pt'))
+            self.__test_videos = torch.load(os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_tsvids.pt'))
+            self.__train_videos = torch.load(os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_trvids.pt'))
             self.CCO = torch.load(os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_CCO.pt'))
             self.__totalElements = torch.load(os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_tels.pt'))
 
@@ -148,15 +177,21 @@ class IRIGestureTemporal(InMemoryDataset):
     def raw_file_names(self):
         # We look for two random files in order to decide if dataset needs to be downloaded.
         if self.StaticData:
-            return ['S1_attention_1_1m_upper.npy', 'S6_stop_2_4m_full.npy']
+            raw_file_names_list = ['S1_attention_1_1m_upper.npy', 'S6_stop_2_4m_full.npy']
+            if self.alsoDownloadVideos:
+                raw_file_names_list.append(os.path.join('videos', 'S1_attention_1_1m_upper.avi'))
+            return raw_file_names_list
         else:
-            return ['S1_continue_3_6m_full.npy', 'S10_turnback_1_1m_upper.npy']
+            raw_file_names_list = ['S1_continue_3_6m_full.npy', 'S10_turnback_1_1m_upper.npy']
+            if self.alsoDownloadVideos:
+                raw_file_names_list.append(os.path.join('videos', 'S1_continue_3_6m_full.avi'))
+            return raw_file_names_list
 
     @property
     def processed_file_names(self):
         # We generate a *.pt file with name composition of each gesture.
         name = '_'.join([gesture[:2] for gesture in self.__categories])
-        return f'{self.dataTypes[:3]}_{name}.pt'
+        return f'{self.dataTypes[:3]}_{str(self.alsoDownloadVideos)[:1]}_{name}.pt'
 
     def download(self):
         git = Github(self.__token)
@@ -164,6 +199,8 @@ class IRIGestureTemporal(InMemoryDataset):
         repository = owner.get_repo(self.__repo)
         if os.path.exists(self.raw_dir): shutil.rmtree(self.raw_dir)
         os.makedirs(self.raw_dir)
+        if self.alsoDownloadVideos:
+            os.makedirs(os.path.join(self.raw_dir, "videos"))
 
         self.__recursiveDownload(repository, self.__serverPath, self.raw_dir)
 
@@ -171,24 +208,37 @@ class IRIGestureTemporal(InMemoryDataset):
         contents = repository.get_contents(server_path)
 
         for content in contents:
-            if content.type == 'dir' and not ("videos" in content.name):
+            if content.type == 'dir':
                 # We use a RegEX to store subject folder recursively.
                 prefix = content.name if re.search("^S\d{0,}$", content.name) else content_prefix
                 self.__recursiveDownload(repository, content.path, local_path, prefix)
-            elif content.type == 'file' and (".npy" in content.name):
+            elif content.type == 'file' and (
+                    ".npy" in content.name or (self.alsoDownloadVideos and ".avi" in content.name)):
                 try:
                     path = content.path
-                    if (("3Djoints" in path) and self.StaticData) or (("dynamic_joints" in path) and self.DynamicData):
+                    if (self.StaticData and (("3Djoints" in path)
+                                             or ("videos" in path and not ("dynamic_videos" in path)))) \
+                            or (self.DynamicData and ("dynamic" in path)):
                         file_name = content_prefix + "_" + content.name
                         file_content = repository.get_contents(path)
                         file_data = base64.b64decode(file_content.content)
-                        file_out = open(os.path.join(local_path, file_name), "wb")
+                        if ".avi" in content.name:
+                            file_out = open(os.path.join(local_path, "videos", file_name), "wb")
+                        else:
+                            file_out = open(os.path.join(local_path, file_name), "wb")
                         file_out.write(file_data)
                         file_out.close()
+
                 except (GithubException, IOError) as exc:
                     print('Error downloading %s: %s', content.path, exc)
 
     def process(self):
+        if os.path.exists(self.processed_dir):
+            shutil.rmtree(self.processed_dir)
+        os.makedirs(self.processed_dir)
+        if self.alsoDownloadVideos:
+            os.makedirs(os.path.join(self.processed_dir, 'videos'))
+
         data_list = []
         self.features = []
         self.targets = []
@@ -196,6 +246,8 @@ class IRIGestureTemporal(InMemoryDataset):
         self.__train_features = []
         self.__test_targets = []
         self.__train_targets = []
+        self.__test_videos = []
+        self.__train_videos = []
 
         # We create an extremly connected graph.
         self.CCO = np.swapaxes([[i, j] for i in range(0, self.number_nodes) for j in range(0, self.number_nodes)], 0, 1)
@@ -207,13 +259,41 @@ class IRIGestureTemporal(InMemoryDataset):
             for path in paths:
                 is_test_subject = path.__contains__(self.__testSubject)
                 gesture_seq = np.load(path, allow_pickle=True)
-
                 number_of_sequences = (gesture_seq.shape[0] // self.frames_gap) - 1
+
+                video_name = None
+                input_video = None
+                if self.alsoDownloadVideos:
+                    video_name = os.path.splitext(os.path.basename(path))[0]
+                    input_video = cv2.VideoCapture(f'{os.path.join(self.raw_dir, "videos", video_name)}.avi')
+
                 for seq in range(0, number_of_sequences):
                     x = np.empty([self.number_nodes, 4, 0])
-                    for frame in range(seq * self.frames_gap, seq * self.frames_gap + self.number_frames):
+                    init_frame = seq * self.frames_gap
+                    end_frame = init_frame + self.number_frames
+
+                    output_video = None
+                    output_video_path = None
+                    if self.alsoDownloadVideos:
+                        output_video_path = f'{os.path.join(self.processed_dir, "videos", video_name)}' \
+                                            f'_{init_frame}_{end_frame}.avi'
+                        output_video = cv2.VideoWriter(output_video_path,
+                                                       cv2.VideoWriter_fourcc(*'XVID'),
+                                                       int(input_video.get(cv2.CAP_PROP_FPS)),
+                                                       (int(input_video.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                                                        int(input_video.get(cv2.CAP_PROP_FRAME_HEIGHT))))
+
+                    for frame in range(init_frame, end_frame):
                         pose = gesture_seq[frame,][0]
                         frame_landmark = np.empty([0, 4])
+
+                        if self.alsoDownloadVideos:
+                            input_video.set(cv2.CAP_PROP_POS_FRAMES, frame)
+                            ret, video_frame = input_video.read()
+                            if ret:
+                                mp.solutions.drawing_utils.draw_landmarks(video_frame,
+                                                                          pose, mp.solutions.pose.POSE_CONNECTIONS)
+                                output_video.write(video_frame)
 
                         # There's 33 landmarks in total.
                         for landmark in range(0, 33):
@@ -221,16 +301,22 @@ class IRIGestureTemporal(InMemoryDataset):
                                 frame_landmark = np.append(frame_landmark, np.expand_dims(
                                     [pose.landmark[landmark].x, pose.landmark[landmark].y, pose.landmark[landmark].z,
                                      pose.landmark[landmark].visibility], axis=0), axis=0)
+
                         # x = [n° nodes, 4, number_of_frames]
                         x = np.append(x, np.expand_dims(frame_landmark, axis=2), axis=2)
+
+                    if self.alsoDownloadVideos:
+                        output_video.release()
 
                     x = np.swapaxes(x, 0, 1)
                     self.features.append(x)  # [4, number_nodes, number_of_frames]
 
                     if is_test_subject:
                         self.__test_features.append(x)
+                        self.__test_videos.append(output_video_path)
                     else:
                         self.__train_features.append(x)
+                        self.__train_videos.append(output_video_path)
 
                     x = np.swapaxes(x, 0, 2)
                     x = torch.tensor(x, dtype=torch.float)  # [number_of_frames, number_nodes, 4]
@@ -257,6 +343,9 @@ class IRIGestureTemporal(InMemoryDataset):
 
                     data_list.append(data)
 
+                if self.alsoDownloadVideos:
+                    input_video.release()
+
         torch.save(self.collate(data_list), self.processed_paths[0])
         torch.save(self.features, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_feat.pt'))
         torch.save(self.__test_features, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_tsfeat.pt'))
@@ -264,6 +353,8 @@ class IRIGestureTemporal(InMemoryDataset):
         torch.save(self.targets, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_trgs.pt'))
         torch.save(self.__test_targets, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_tstrgs.pt'))
         torch.save(self.__train_targets, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_trtrgs.pt'))
+        torch.save(self.__test_videos, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_tsvids.pt'))
+        torch.save(self.__train_videos, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_trvids.pt'))
         torch.save(self.CCO, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_CCO.pt'))
 
         self.__totalElements = len(data_list)
@@ -278,14 +369,16 @@ class IRIGestureTemporal(InMemoryDataset):
             * **(train_dataset, test_dataset)** *(tuple of DynamicGraphTemporalSignal)* - The IRIGestureTemporal dataset.
         """
 
-        test_dataset = DynamicGraphTemporalSignal(
+        test_dataset = CustomDynamicGraphTemporalSignal(
+            self.__test_videos,
             self._get_edges(number_elements=len(self.__test_features)),  # List of CCO [2, self.number_nodes**2]
             self._get_edge_weights(number_elements=len(self.__test_features)),  # List of ones (self.number_nodes**2, )
             self.__test_features,  # List each item (4, self.number_nodes, frames)
             self.__test_targets  # List each item (frames, gestures)
         )
 
-        train_dataset = DynamicGraphTemporalSignal(
+        train_dataset = CustomDynamicGraphTemporalSignal(
+            self.__train_videos,
             self._get_edges(number_elements=len(self.__train_features)),  # List of CCO [2, self.number_nodes**2]
             self._get_edge_weights(number_elements=len(self.__train_features)),  # List of ones (self.number_nodes**2, )
             self.__train_features,  # List each item (4, self.number_nodes, frames)
