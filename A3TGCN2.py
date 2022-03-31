@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 
 from torch_geometric_temporal.nn.recurrent import A3TGCN2
+from torch_geometric_temporal.dataset import MTMDatasetLoader
 
 seed = 1997
 np.random.seed(seed)
@@ -19,8 +20,6 @@ torch.backends.cudnn.benchmark = True
 DEVICE = torch.device('cpu')
 shuffle = True
 batch_size = 32
-
-from dataset.MTMDataset import MTMDatasetLoader
 
 loader = MTMDatasetLoader()
 dataset = loader.get_dataset(frames=16)
