@@ -10,7 +10,7 @@ __pycache__/
 runs/
 dataset/raw/
 dataset/processed/
-checkpoints/
+checkpoints/**
 .idea/
 .Python
 build/
