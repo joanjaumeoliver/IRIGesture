@@ -312,16 +312,12 @@ class IRIGestureTemporal(InMemoryDataset):
                     x = np.swapaxes(x, 0, 1)
                     self.features.append(x)  # [4, number_nodes, number_of_frames]
 
-                    output_video_name = list(map(int,
-                                                 re.findall(r'\d+',
-                                                            os.path.splitext(os.path.basename(output_video_path))[0])))
-
                     if is_test_subject:
                         self.__test_features.append(x)
-                        self.__test_videos.append(output_video_name)
+                        self.__test_videos.append(output_video_path)
                     else:
                         self.__train_features.append(x)
-                        self.__train_videos.append(output_video_name)
+                        self.__train_videos.append(output_video_path)
 
                     x = np.swapaxes(x, 0, 2)
                     x = torch.tensor(x, dtype=torch.float)  # [number_of_frames, number_nodes, 4]

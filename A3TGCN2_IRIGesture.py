@@ -19,6 +19,7 @@ def train(TensorBoardEnabled, dataset_videos_paths):
     step = 0
     loss_list = []
     acc_list = []
+    video_paths = []
     for encoder_inputs, labels, paths_idx in train_loader:
         y_hat = model(encoder_inputs, static_edge_index, static_weight_index)  # Get model predictions
         loss = loss_fn(y_hat.float(), labels.long())
@@ -31,6 +32,8 @@ def train(TensorBoardEnabled, dataset_videos_paths):
         corrects = torch.flatten((torch.argmax(y_hat, dim=1) == labels).float())
         acc = corrects.sum() / len(corrects)
         acc_list.append(acc.numpy())
+
+        video_paths.append(dataset_videos_paths[random.choice(paths_idx.tolist())])
 
         if step % 25 == 0:
             print("Loss = " + str(sum(loss_list) / len(loss_list)))
@@ -62,7 +65,7 @@ def test(TensorBoardEnabled, dataset_videos_paths):
         acc = corrects.sum() / len(corrects)
         total_acc.append(acc.numpy())
 
-        video_paths.append(dataset_videos_paths[random.choice(static_edge_index)])
+        video_paths.append(dataset_videos_paths[random.choice(paths_idx.tolist())])
 
     print("Test CrossEntropyLoss: {:.4f} Acc: {:.4f}".format(sum(total_loss) / len(total_loss),
                                                              sum(total_acc) / len(total_acc)))
@@ -173,7 +176,7 @@ for snapshot in train_dataset:
     static_weight_index = snapshot.edge_attr.to(DEVICE)
     break
 
-writer = SummaryWriter(log_dir="ARTGCN2_IRIGesture", comment="Demo comment")
+writer = SummaryWriter(log_dir=os.path.join('runs', 'ARTGCN2_IRIGesture'), comment='Demo comment')
 
 model.train()
 epoch = 0
