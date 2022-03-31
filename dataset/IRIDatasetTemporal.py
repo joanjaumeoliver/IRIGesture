@@ -312,12 +312,16 @@ class IRIGestureTemporal(InMemoryDataset):
                     x = np.swapaxes(x, 0, 1)
                     self.features.append(x)  # [4, number_nodes, number_of_frames]
 
+                    output_video_name = list(map(int,
+                                                 re.findall(r'\d+',
+                                                            os.path.splitext(os.path.basename(output_video_path))[0])))
+
                     if is_test_subject:
                         self.__test_features.append(x)
-                        self.__test_videos.append(output_video_path)
+                        self.__test_videos.append(output_video_name)
                     else:
                         self.__train_features.append(x)
-                        self.__train_videos.append(output_video_path)
+                        self.__train_videos.append(output_video_name)
 
                     x = np.swapaxes(x, 0, 2)
                     x = torch.tensor(x, dtype=torch.float)  # [number_of_frames, number_nodes, 4]
@@ -363,7 +367,7 @@ class IRIGestureTemporal(InMemoryDataset):
 
         self.__processed = True
 
-    def get_dataset(self) -> Tuple[DynamicGraphTemporalSignal, DynamicGraphTemporalSignal]:
+    def get_dataset(self) -> Tuple[CustomDynamicGraphTemporalSignal, CustomDynamicGraphTemporalSignal]:
         """Returning the IRIGesture data iterator.
 
         Return types:
@@ -372,16 +376,16 @@ class IRIGestureTemporal(InMemoryDataset):
 
         test_dataset = CustomDynamicGraphTemporalSignal(
             self.__test_videos,
-            self._get_edges(number_elements=len(self.__test_features)),  # List of CCO [2, self.number_nodes**2]
-            self._get_edge_weights(number_elements=len(self.__test_features)),  # List of ones (self.number_nodes**2, )
+            self.__get_edges(number_elements=len(self.__test_features)),  # List of CCO [2, self.number_nodes**2]
+            self.__get_edge_weights(number_elements=len(self.__test_features)),  # List of ones (self.number_nodes**2, )
             self.__test_features,  # List each item (4, self.number_nodes, frames)
             self.__test_targets  # List each item (frames, gestures)
         )
 
         train_dataset = CustomDynamicGraphTemporalSignal(
             self.__train_videos,
-            self._get_edges(number_elements=len(self.__train_features)),  # List of CCO [2, self.number_nodes**2]
-            self._get_edge_weights(number_elements=len(self.__train_features)),  # List of ones (self.number_nodes**2, )
+            self.__get_edges(number_elements=len(self.__train_features)),  # List of CCO [2, self.number_nodes**2]
+            self.__get_edge_weights(number_elements=len(self.__train_features)),  # List of ones (self.number_nodes**2, )
             self.__train_features,  # List each item (4, self.number_nodes, frames)
             self.__train_targets  # List each item (frames, gestures)
         )
@@ -397,19 +401,19 @@ class IRIGestureTemporal(InMemoryDataset):
             * **dataset** *(DynamicGraphTemporalSignal)* - The IRIGestureTemporal dataset.
         """
         dataset = DynamicGraphTemporalSignal(
-            self._get_edges(),  # List of CCO [2, self.number_nodes**2]
-            self._get_edge_weights(),  # List of ones (self.number_nodes**2, )
+            self.__get_edges(),  # List of CCO [2, self.number_nodes**2]
+            self.__get_edge_weights(),  # List of ones (self.number_nodes**2, )
             self.features,  # List each item (4, self.number_nodes, frames)
             self.targets  # List each item (frames, gestures)
         )
         return dataset
 
-    def _get_edges(self, number_elements=None):
+    def __get_edges(self, number_elements=None):
         number_of_elements = self.__totalElements if number_elements is None else number_elements
         edges = [self.CCO] * number_of_elements
         return edges
 
-    def _get_edge_weights(self, number_elements=None):
+    def __get_edge_weights(self, number_elements=None):
         number_of_elements = self.__totalElements if number_elements is None else number_elements
         edge_weights = [np.ones((self.number_nodes ** 2,))] * number_of_elements
         return edge_weights
