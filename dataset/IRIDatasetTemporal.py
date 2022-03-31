@@ -197,21 +197,22 @@ class IRIGestureTemporal(InMemoryDataset):
         git = Github(self.__token)
         owner = git.get_user(self.__owner)
         repository = owner.get_repo(self.__repo)
-        if os.path.exists(self.raw_dir): shutil.rmtree(self.raw_dir)
+        if os.path.exists(self.raw_dir):
+            shutil.rmtree(self.raw_dir)
         os.makedirs(self.raw_dir)
         if self.alsoDownloadVideos:
             os.makedirs(os.path.join(self.raw_dir, "videos"))
 
-        self.__recursiveDownload(repository, self.__serverPath, self.raw_dir)
+        self.__recursive_download(repository, self.__serverPath, self.raw_dir)
 
-    def __recursiveDownload(self, repository, server_path, local_path, content_prefix=""):
+    def __recursive_download(self, repository, server_path, local_path, content_prefix=""):
         contents = repository.get_contents(server_path)
 
         for content in contents:
             if content.type == 'dir':
                 # We use a RegEX to store subject folder recursively.
                 prefix = content.name if re.search("^S\d{0,}$", content.name) else content_prefix
-                self.__recursiveDownload(repository, content.path, local_path, prefix)
+                self.__recursive_download(repository, content.path, local_path, prefix)
             elif content.type == 'file' and (
                     ".npy" in content.name or (self.alsoDownloadVideos and ".avi" in content.name)):
                 try:
@@ -284,7 +285,7 @@ class IRIGestureTemporal(InMemoryDataset):
                                                         int(input_video.get(cv2.CAP_PROP_FRAME_HEIGHT))))
 
                     for frame in range(init_frame, end_frame):
-                        pose = gesture_seq[frame,][0]
+                        pose = gesture_seq[frame, ][0]
                         frame_landmark = np.empty([0, 4])
 
                         if self.alsoDownloadVideos:
@@ -362,11 +363,11 @@ class IRIGestureTemporal(InMemoryDataset):
 
         self.__processed = True
 
-    def getDataset(self) -> Tuple[DynamicGraphTemporalSignal, DynamicGraphTemporalSignal]:
+    def get_dataset(self) -> Tuple[DynamicGraphTemporalSignal, DynamicGraphTemporalSignal]:
         """Returning the IRIGesture data iterator.
 
         Return types:
-            * **(train_dataset, test_dataset)** *(tuple of DynamicGraphTemporalSignal)* - The IRIGestureTemporal dataset.
+            * **(train_dataset, test_dataset)** *(tuple of DynamicGraphTemporalSignal)* - The IRIGestureTemporalDataset.
         """
 
         test_dataset = CustomDynamicGraphTemporalSignal(
@@ -387,7 +388,7 @@ class IRIGestureTemporal(InMemoryDataset):
 
         return train_dataset, test_dataset
 
-    def getAllDataset(self) -> DynamicGraphTemporalSignal:
+    def get_all_dataset(self) -> DynamicGraphTemporalSignal:
         """Returning the IRIGesture data iterator.
 
         Args types:

@@ -5,7 +5,9 @@ import os
 import torch
 import torch.nn.functional
 from pathlib import Path
+from torch.utils.data import TensorDataset
 from torch_geometric_temporal.nn.recurrent import A3TGCN2
+from torch.backends import cudnn
 # from torch_geometric_temporal.nn.attention import GMAN
 from torch.utils.tensorboard import SummaryWriter
 
@@ -63,7 +65,7 @@ def test(TensorBoardEnabled):
     if TensorBoardEnabled:
         writer.add_scalar('Loss/Test', sum(total_loss) / len(total_loss), step)
         writer.add_scalar('Accuracy/Test', sum(total_acc) / len(total_acc), step)
-        #writer.add_video(tag, vid_tensor, global_step=step, fps=4)
+        # writer.add_video(tag, vid_tensor, global_step=step, fps=4)
 
 
 seed = 1997
@@ -78,8 +80,8 @@ shuffle = True
 batch_size = 32
 
 loader = IRIGestureTemporal(os.path.join(Path().absolute(), 'dataset'), alsoDownloadVideos=True)
-dataset = loader.getAllDataset()
-train_dataset, test_dataset = loader.getDataset()
+dataset = loader.get_all_dataset()
+train_dataset, test_dataset = loader.get_dataset()
 # n frames
 # 33 nodes
 # 4 features
