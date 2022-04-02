@@ -138,13 +138,17 @@ dependencies:
     - google-auth==2.6.2
     - google-auth-oauthlib==0.4.6
     - grpcio==1.44.0
+    - imageio==2.16.1
+    - imageio-ffmpeg==0.4.5
     - importlib-metadata==4.11.3
     - isodate==0.6.1
     - keyboard==0.13.5
     - markdown==3.3.6
     - mediapipe==0.8.9.1
+    - moviepy==1.0.3
     - oauthlib==3.2.0
     - opencv-contrib-python==4.5.5.64
+    - proglog==0.1.9
     - protobuf==3.19.4
     - pyasn1==0.4.8
     - pyasn1-modules==0.2.8
