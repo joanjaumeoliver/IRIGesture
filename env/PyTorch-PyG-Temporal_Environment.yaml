@@ -6,6 +6,7 @@ channels:
   - defaults
 dependencies:
   - asttokens=2.0.5=pyhd8ed1ab_0
+  - av=9.1.1=py38hd5c71d3_0
   - backcall=0.2.0=pyh9f0ad1d_0
   - backports=1.0=py_2
   - backports.functools_lru_cache=1.6.4=pyhd8ed1ab_0
@@ -14,7 +15,7 @@ dependencies:
   - brotli-bin=1.0.9=h8ffe710_6
   - brotlipy=0.7.0=py38h294d835_1003
   - ca-certificates=2021.10.8=h5b45459_0
-  - certifi=2021.10.8=py38haa244fe_1
+  - certifi=2021.10.8=py38haa244fe_2
   - cffi=1.15.0=py38hd8c33c5_0
   - charset-normalizer=2.0.10=pyhd8ed1ab_0
   - colorama=0.4.4=pyh9f0ad1d_0
@@ -24,6 +25,7 @@ dependencies:
   - debugpy=1.5.1=py38h885f38d_0
   - entrypoints=0.4=pyhd8ed1ab_0
   - executing=0.8.3=pyhd8ed1ab_0
+  - ffmpeg=4.3.1=ha925a31_0
   - fonttools=4.28.5=py38h294d835_0
   - freetype=2.10.4=hd328e21_0
   - googledrivedownloader=0.4=pyhd3deb0d_1
@@ -64,7 +66,7 @@ dependencies:
   - numpy=1.21.2=py38hfca59bb_0
   - numpy-base=1.21.2=py38h0829f74_0
   - olefile=0.46=pyhd3eb1b0_0
-  - openssl=1.1.1l=h8ffe710_0
+  - openssl=1.1.1n=h8ffe710_0
   - packaging=21.3=pyhd8ed1ab_0
   - pandas=1.3.5=py38h5d928e2_0
   - parso=0.8.3=pyhd8ed1ab_0
@@ -130,16 +132,34 @@ dependencies:
   - pip:
     - absl-py==1.0.0
     - attrs==21.4.0
+    - cachetools==5.0.0
     - decorator==4.4.2
     - deprecated==1.2.13
+    - google-auth==2.6.2
+    - google-auth-oauthlib==0.4.6
+    - grpcio==1.44.0
+    - importlib-metadata==4.11.3
     - isodate==0.6.1
+    - keyboard==0.13.5
+    - markdown==3.3.6
     - mediapipe==0.8.9.1
+    - oauthlib==3.2.0
     - opencv-contrib-python==4.5.5.64
     - protobuf==3.19.4
+    - pyasn1==0.4.8
+    - pyasn1-modules==0.2.8
     - pygithub==1.55
     - pyjwt==2.3.0
     - pynacl==1.5.0
     - pytorch-ignite==0.4.8
     - rdflib==6.1.1
+    - requests-oauthlib==1.3.1
+    - rsa==4.8
+    - tensorboard==2.8.0
+    - tensorboard-data-server==0.6.1
+    - tensorboard-plugin-wit==1.8.1
     - torch-geometric-temporal==0.50.0
+    - torch-tb-profiler==0.4.0
+    - werkzeug==2.0.3
     - wrapt==1.14.0
+    - zipp==3.7.0
