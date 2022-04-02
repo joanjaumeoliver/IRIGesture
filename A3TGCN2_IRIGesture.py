@@ -1,4 +1,5 @@
 import random
+import typing
 
 import numpy as np
 import os
@@ -6,16 +7,17 @@ import os
 import torch
 import torch.nn.functional
 from pathlib import Path
+
+import torchvision.io
 from torch.utils.data import TensorDataset
 from torch_geometric_temporal.nn.recurrent import A3TGCN2
 from torch.backends import cudnn
-# from torch_geometric_temporal.nn.attention import GMAN
 from torch.utils.tensorboard import SummaryWriter
 
 from dataset.IRIDatasetTemporal import IRIGestureTemporal
 
 
-def train(TensorBoardEnabled, dataset_videos_paths):
+def train(tensor_board_enabled: bool, dataset_videos_paths: typing.List[str]):
     step = 0
     loss_list = []
     acc_list = []
@@ -33,27 +35,25 @@ def train(TensorBoardEnabled, dataset_videos_paths):
         acc = corrects.sum() / len(corrects)
         acc_list.append(acc.numpy())
 
-        video_paths.append(dataset_videos_paths[random.choice(paths_idx.tolist())])
-
         if step % 25 == 0:
             print("Loss = " + str(sum(loss_list) / len(loss_list)))
             print("Acc = " + str(sum(acc_list) / len(acc_list)))
     print("Epoch {} train CrossEntropyLoss: {:.4f} Acc: {:.4f}".format(epoch, sum(loss_list) / len(loss_list),
                                                                        sum(acc_list) / len(acc_list)))
-    if TensorBoardEnabled:
+    if tensor_board_enabled:
         writer.add_scalar('Loss/Train', sum(loss_list) / len(loss_list), epoch)
         writer.add_scalar('Accuracy/Train', sum(acc_list) / len(acc_list), epoch)
+
     torch.save(model.state_dict(), os.path.join(Path().absolute(), 'checkpoints', 'A3TGCN2_Checkpoints',
                                                 'Epoch_' + str(epoch) + '.pth'))
 
 
-def test(TensorBoardEnabled, dataset_videos_paths):
+def test(tensor_board_enabled: bool, dataset_videos_paths: typing.List[str], categories: typing.List[str]):
     model.eval()
-    step = 0
+    batch = 0
     # Store for analysis
     total_loss = []
     total_acc = []
-    video_paths = []
     for encoder_inputs, labels, paths_idx in test_loader:
         # Get model predictions
         y_hat = model(encoder_inputs, static_edge_index, static_weight_index)
@@ -61,17 +61,40 @@ def test(TensorBoardEnabled, dataset_videos_paths):
         loss = loss_fn(y_hat.float(), labels.long())
         total_loss.append(loss.item())
 
-        corrects = torch.flatten((torch.argmax(y_hat, dim=1) == labels).float())
+        corrects_list = (torch.argmax(y_hat, dim=1) == labels).float()
+        corrects = torch.flatten(corrects_list)
         acc = corrects.sum() / len(corrects)
         total_acc.append(acc.numpy())
 
-        video_paths.append(dataset_videos_paths[random.choice(paths_idx.tolist())])
+        if tensor_board_enabled:
+            video_idx = random.choice(paths_idx.tolist())
+            idx = np.where(paths_idx.numpy() == video_idx)
+            video_path = dataset_videos_paths[video_idx]
+            video_label = categories[int(labels.numpy()[idx, :][0][0][0])]
+            guessed_label = categories[int(torch.argmax(y_hat, dim=1).numpy()[idx, :][0][0][0])]
+            video_corrects = torch.flatten(corrects_list[idx, :])
+            video_result = video_corrects.sum() / len(video_corrects)
+            writer.add_video(f'{video_label}/Test', _read_video(video_path), batch)
+            writer.add_text(f'{video_label}/Test',
+                            f'Guessed {guessed_label} with an accuracy of: {video_result}', batch)
 
-    print("Test CrossEntropyLoss: {:.4f} Acc: {:.4f}".format(sum(total_loss) / len(total_loss),
+        batch += 1
+
+    print('Test CrossEntropyLoss: {:.4f} Acc: {:.4f}'.format(sum(total_loss) / len(total_loss),
                                                              sum(total_acc) / len(total_acc)))
-    if TensorBoardEnabled:
-        writer.add_scalar('Loss/Test', sum(total_loss) / len(total_loss), step)
-        writer.add_scalar('Accuracy/Test', sum(total_acc) / len(total_acc), step)
+    if tensor_board_enabled:
+        writer.add_scalar('Loss/Test', sum(total_loss) / len(total_loss), 0)
+        writer.add_scalar('Accuracy/Test', sum(total_acc) / len(total_acc), 0)
+
+
+def _read_video(video_path: str) -> torch.Tensor:
+    """
+    Read a video with 4D tensor dimensions [time(frame), new_width, new_height, channel]
+    and converts it to a 5D tensor [batchsize, time(frame), channel(color), height, width].
+    """
+    original_video = torchvision.io.read_video(video_path)
+    video = np.transpose(original_video[0].numpy()[..., np.newaxis], (4, 0, 3, 1, 2))
+    return torch.from_numpy(video)
 
 
 seed = 1997
@@ -88,10 +111,7 @@ batch_size = 64
 loader = IRIGestureTemporal(os.path.join(Path().absolute(), 'dataset'), alsoDownloadVideos=True)
 dataset = loader.get_all_dataset()
 train_dataset, test_dataset = loader.get_dataset()
-# n frames
-# 33 nodes
-# 4 features
-# 8 outputs
+
 print("Dataset type:  ", dataset)
 print("Number of samples / sequences: ", len(set(dataset)))
 
@@ -176,17 +196,18 @@ for snapshot in train_dataset:
     static_weight_index = snapshot.edge_attr.to(DEVICE)
     break
 
-writer = SummaryWriter(log_dir=os.path.join('runs', 'ARTGCN2_IRIGesture'), comment='Demo comment')
+writer = SummaryWriter(log_dir=os.path.join('runs', 'A3TGCN2_IRIGesture'),
+                       comment=f'{input("Add TensorBoard Comment")}')
 
 model.train()
 epoch = 0
 max_epochs = 3000
 while True:
     if epoch < max_epochs:
-        train(TensorBoardEnabled=True, dataset_videos_paths=train_dataset.videos_paths)
+        train(tensor_board_enabled=True, dataset_videos_paths=train_dataset.videos_paths)
         epoch += 1
-        if epoch % 5 == 0:
-            test(TensorBoardEnabled=True, dataset_videos_paths=test_dataset.videos_paths)
+        if epoch % 30 == 0:
+            test(tensor_board_enabled=True, dataset_videos_paths=test_dataset.videos_paths, categories=loader.categories)
             model.train()
     elif input("Do you want to exit?") == 'Yes':
         break

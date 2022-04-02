@@ -381,7 +381,8 @@ class IRIGestureTemporal(InMemoryDataset):
         train_dataset = CustomDynamicGraphTemporalSignal(
             self.__train_videos,
             self.__get_edges(number_elements=len(self.__train_features)),  # List of CCO [2, self.number_nodes**2]
-            self.__get_edge_weights(number_elements=len(self.__train_features)),  # List of ones (self.number_nodes**2, )
+            self.__get_edge_weights(number_elements=len(self.__train_features)),  # List of ones (
+            # self.number_nodes**2, )
             self.__train_features,  # List each item (4, self.number_nodes, frames)
             self.__train_targets  # List each item (frames, gestures)
         )
@@ -413,3 +414,7 @@ class IRIGestureTemporal(InMemoryDataset):
         number_of_elements = self.__totalElements if number_elements is None else number_elements
         edge_weights = [np.ones((self.number_nodes ** 2,))] * number_of_elements
         return edge_weights
+
+    @property
+    def categories(self) -> List[str]:
+        return self.__categories
