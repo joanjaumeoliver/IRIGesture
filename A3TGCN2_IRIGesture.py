@@ -217,7 +217,7 @@ while True:
     if epoch < max_epochs:
         train(tensor_board_enabled=True)
         epoch += 1
-        if epoch % 1 == 0:
+        if epoch % 30 == 0:
             test(tensor_board_enabled=True, dataset_videos_paths=test_dataset.videos_paths,
                  categories=loader.categories)
             model.train()
