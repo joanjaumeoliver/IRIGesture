@@ -23,11 +23,12 @@ def train(tensor_board_enabled: bool, dataset_videos_paths: typing.List[str]):
     acc_list = []
     video_paths = []
     for encoder_inputs, labels, paths_idx in train_loader:
+        optimizer.zero_grad()
         y_hat = model(encoder_inputs, static_edge_index, static_weight_index)  # Get model predictions
         loss = loss_fn(y_hat.float(), labels.long())
         loss.backward()
         optimizer.step()
-        optimizer.zero_grad()
+        scheduler.step()
         step = step + 1
         loss_list.append(loss.item())
 
@@ -40,9 +41,13 @@ def train(tensor_board_enabled: bool, dataset_videos_paths: typing.List[str]):
             print("Acc = " + str(sum(acc_list) / len(acc_list)))
     print("Epoch {} train CrossEntropyLoss: {:.4f} Acc: {:.4f}".format(epoch, sum(loss_list) / len(loss_list),
                                                                        sum(acc_list) / len(acc_list)))
+
     if tensor_board_enabled:
         writer.add_scalar('Loss/Train', sum(loss_list) / len(loss_list), epoch)
         writer.add_scalar('Accuracy/Train', sum(acc_list) / len(acc_list), epoch)
+
+        for idx, p in enumerate(model.parameters()):
+            writer.add_scalar(f'TrainGradients/grad_{idx}', p.grad.norm(), epoch)
 
     torch.save(model.state_dict(), os.path.join(Path().absolute(), 'checkpoints', 'A3TGCN2_Checkpoints',
                                                 'Epoch_' + str(epoch) + '.pth'))
@@ -70,12 +75,13 @@ def test(tensor_board_enabled: bool, dataset_videos_paths: typing.List[str], cat
             video_idx = random.choice(paths_idx.tolist())
             idx = np.where(paths_idx.numpy() == video_idx)
             video_path = dataset_videos_paths[video_idx]
+            video_name = os.path.splitext(os.path.basename(video_path))[0]
             video_label = categories[int(labels.numpy()[idx, :][0][0][0])]
             guessed_label = categories[int(torch.argmax(y_hat, dim=1).numpy()[idx, :][0][0][0])]
             video_corrects = torch.flatten(corrects_list[idx, :])
             video_result = video_corrects.sum() / len(video_corrects)
-            writer.add_video(f'{video_label}/Test', _read_video(video_path), batch)
-            writer.add_text(f'{video_label}/Test',
+            writer.add_video(f'{video_name}/{video_label}/Test', _read_video(video_path), batch)
+            writer.add_text(f'{video_name}/{video_label}/Test',
                             f'Guessed {guessed_label} with an accuracy of: {video_result}', batch)
 
         batch += 1
@@ -186,6 +192,7 @@ model = AttentionGCN(node_features=4, number_nodes=loader.number_nodes, number_t
 # model.load_state_dict(torch.load("C:\_Projects\IRIGesture\A3TGCN2_Checkpoints\Epoch_29.pth"))
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.5)
 loss_fn = torch.nn.CrossEntropyLoss()
 
 # Loading the graph once because it's a static graph
@@ -196,8 +203,7 @@ for snapshot in train_dataset:
     static_weight_index = snapshot.edge_attr.to(DEVICE)
     break
 
-writer = SummaryWriter(log_dir=os.path.join('runs', 'A3TGCN2_IRIGesture'),
-                       comment=f'{input("Add TensorBoard Comment")}')
+writer = SummaryWriter(log_dir=os.path.join('runs', f'{input("Add TensorBoard RUN Name")}'))
 
 model.train()
 epoch = 0
@@ -207,7 +213,8 @@ while True:
         train(tensor_board_enabled=True, dataset_videos_paths=train_dataset.videos_paths)
         epoch += 1
         if epoch % 30 == 0:
-            test(tensor_board_enabled=True, dataset_videos_paths=test_dataset.videos_paths, categories=loader.categories)
+            test(tensor_board_enabled=True, dataset_videos_paths=test_dataset.videos_paths,
+                 categories=loader.categories)
             model.train()
     elif input("Do you want to exit?") == 'Yes':
         break
