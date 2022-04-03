@@ -123,8 +123,8 @@ class IRIGestureTemporal(InMemoryDataset):
 
     number_nodes = 15
     number_targets = -1
-    number_frames = 10
-    frames_gap = 5
+    number_frames = 30
+    frames_gap = 3
     __testSubject = 'S2'
     alsoDownloadVideos = False
 
@@ -260,7 +260,7 @@ class IRIGestureTemporal(InMemoryDataset):
             for path in paths:
                 is_test_subject = path.__contains__(self.__testSubject)
                 gesture_seq = np.load(path, allow_pickle=True)
-                number_of_sequences = (gesture_seq.shape[0] // self.frames_gap) - 1
+                number_of_sequences = (gesture_seq.shape[0] - self.number_frames) // self.frames_gap
 
                 video_name = None
                 input_video = None
