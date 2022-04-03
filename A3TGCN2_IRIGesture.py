@@ -17,11 +17,10 @@ from torch.utils.tensorboard import SummaryWriter
 from dataset.IRIDatasetTemporal import IRIGestureTemporal
 
 
-def train(tensor_board_enabled: bool, dataset_videos_paths: typing.List[str]):
+def train(tensor_board_enabled: bool):
     step = 0
     loss_list = []
     acc_list = []
-    video_paths = []
     for encoder_inputs, labels, paths_idx in train_loader:
         optimizer.zero_grad()
         y_hat = model(encoder_inputs, static_edge_index, static_weight_index)  # Get model predictions
@@ -77,11 +76,17 @@ def test(tensor_board_enabled: bool, dataset_videos_paths: typing.List[str], cat
             video_path = dataset_videos_paths[video_idx]
             video_name = os.path.splitext(os.path.basename(video_path))[0]
             video_label = categories[int(labels.numpy()[idx, :][0][0][0])]
-            guessed_label = categories[int(torch.argmax(y_hat, dim=1).numpy()[idx, :][0][0][0])]
             video_corrects = torch.flatten(corrects_list[idx, :])
-            video_result = video_corrects.sum() / len(video_corrects)
-            writer.add_video(f'{video_name}/{video_label}/Test', _read_video(video_path), batch)
-            writer.add_text(f'{video_name}/{video_label}/Test',
+            total_correct_frames = video_corrects.sum()
+            if total_correct_frames > 0:
+                guessed_label_idx = np.where(video_corrects.numpy() == 1)[0][0]
+                guessed_label = categories[int(torch.argmax(y_hat, dim=1).numpy()[idx, :][0][0][guessed_label_idx])]
+            else:
+                guessed_label = 'Nothing'
+
+            video_result = total_correct_frames / len(video_corrects)
+            writer.add_video(f'{video_label}/{video_name}', _read_video(video_path), batch)
+            writer.add_text(f'{video_label}/{video_name}',
                             f'Guessed {guessed_label} with an accuracy of: {video_result}', batch)
 
         batch += 1
@@ -210,9 +215,9 @@ epoch = 0
 max_epochs = 3000
 while True:
     if epoch < max_epochs:
-        train(tensor_board_enabled=True, dataset_videos_paths=train_dataset.videos_paths)
+        train(tensor_board_enabled=True)
         epoch += 1
-        if epoch % 30 == 0:
+        if epoch % 1 == 0:
             test(tensor_board_enabled=True, dataset_videos_paths=test_dataset.videos_paths,
                  categories=loader.categories)
             model.train()
