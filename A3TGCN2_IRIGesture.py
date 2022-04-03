@@ -48,6 +48,10 @@ def train(tensor_board_enabled: bool):
         for idx, p in enumerate(model.parameters()):
             writer.add_scalar(f'TrainGradients/grad_{idx}', p.grad.norm(), epoch)
 
+        writer.add_hparams({'lr': scheduler.get_last_lr()[0]},
+                           {'accuracy': sum(acc_list) / len(acc_list),
+                            'loss': sum(loss_list) / len(loss_list)})
+
     torch.save(model.state_dict(), os.path.join(Path().absolute(), 'checkpoints', 'A3TGCN2_Checkpoints',
                                                 'Epoch_' + str(epoch) + '.pth'))
 
