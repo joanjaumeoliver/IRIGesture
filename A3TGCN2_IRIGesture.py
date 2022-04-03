@@ -98,8 +98,8 @@ def test(tensor_board_enabled: bool, dataset_videos_paths: typing.List[str], cat
     print('Test CrossEntropyLoss: {:.4f} Acc: {:.4f}'.format(sum(total_loss) / len(total_loss),
                                                              sum(total_acc) / len(total_acc)))
     if tensor_board_enabled:
-        writer.add_scalar('Loss/Test', sum(total_loss) / len(total_loss), 0)
-        writer.add_scalar('Accuracy/Test', sum(total_acc) / len(total_acc), 0)
+        writer.add_scalar('Loss/Test', sum(total_loss) / len(total_loss), epoch)
+        writer.add_scalar('Accuracy/Test', sum(total_acc) / len(total_acc), epoch)
 
 
 def _read_video(video_path: str) -> torch.Tensor:
