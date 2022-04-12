@@ -325,8 +325,8 @@ class IRIGestureTemporal(InMemoryDataset):
                     edge_index = torch.tensor(self.CCO)  # [2, 1089]
                     y = self.__categories.index(gesture)
 
-                    target = np.zeros([self.number_frames, len(self.__categories)])
-                    target[:, y] = 1
+                    target = np.zeros(len(self.__categories))
+                    target[y] = 1
                     self.targets.append(target)
 
                     if is_test_subject:
@@ -384,7 +384,7 @@ class IRIGestureTemporal(InMemoryDataset):
             self.__get_edge_weights(number_elements=len(self.__train_features)),  # List of ones (
             # self.number_nodes**2, )
             self.__train_features,  # List each item (4, self.number_nodes, frames)
-            self.__train_targets  # List each item (frames, gestures)
+            self.__train_targets  # List each item (gestures)
         )
 
         return train_dataset, test_dataset
@@ -401,7 +401,7 @@ class IRIGestureTemporal(InMemoryDataset):
             self.__get_edges(),  # List of CCO [2, self.number_nodes**2]
             self.__get_edge_weights(),  # List of ones (self.number_nodes**2, )
             self.features,  # List each item (4, self.number_nodes, frames)
-            self.targets  # List each item (frames, gestures)
+            self.targets  # List each item (gestures)
         )
         return dataset
 
