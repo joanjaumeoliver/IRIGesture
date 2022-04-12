@@ -7,7 +7,7 @@ __pycache__/
 *.so
 
 # Distribution / packaging
-runs/
+tensorboard/runs/
 dataset/raw/
 dataset/processed/
 checkpoints/**
@@ -130,3 +130,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+/tensorboard/StartTensorBoard_Results.bat
+/tensorboard/StartTensorBoard_Runs.bat
