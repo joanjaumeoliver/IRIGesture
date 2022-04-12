@@ -14,6 +14,7 @@ __pycache__/
 tensorboard/runs/
 dataset/raw/
 dataset/processed/
+tensorboard/results/*/
 
 # Distribution / packaging
 checkpoints/**
