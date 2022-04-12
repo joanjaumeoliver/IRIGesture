@@ -6,10 +6,16 @@ __pycache__/
 # C extensions
 *.so
 
-# Distribution / packaging
+# Custom extensions
+*.zip
+*.bat
+
+# Custom folders
 tensorboard/runs/
 dataset/raw/
 dataset/processed/
+
+# Distribution / packaging
 checkpoints/**
 .idea/
 .Python
@@ -130,5 +136,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-/tensorboard/StartTensorBoard_Results.bat
-/tensorboard/StartTensorBoard_Runs.bat
