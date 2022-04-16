@@ -13,11 +13,11 @@ from pathlib import Path
 import torchvision.io
 from sklearn.metrics import confusion_matrix
 from torch.utils.data import TensorDataset
-from torch_geometric_temporal.nn.recurrent import A3TGCN2
 from torch.backends import cudnn
 from torch.utils.tensorboard import SummaryWriter
 
 from dataset.IRIDatasetTemporal import IRIGestureTemporal
+from model.AAGCN import AAGCN
 
 
 def train(tensor_board_enabled: bool, categories: typing.List[str]):
@@ -28,10 +28,12 @@ def train(tensor_board_enabled: bool, categories: typing.List[str]):
     total_labels = np.zeros(0)
     for encoder_inputs, labels, paths_idx in train_loader:
         total_labels = np.concatenate((total_labels, labels.numpy()))
+
         optimizer.zero_grad()
-        y_hat = model(encoder_inputs, static_edge_index, static_weight_index)  # Get model predictions
+        y_hat = model(encoder_inputs)  # Get model predictions
         loss = loss_fn(y_hat.float(), labels.long())
         loss.backward()
+
         optimizer.step()
         step = step + 1
         loss_list.append(loss.item())
@@ -59,7 +61,8 @@ def train(tensor_board_enabled: bool, categories: typing.List[str]):
         writer.add_scalar('Accuracy/Train', sum(acc_list) / len(acc_list), epoch)
 
         for idx, p in enumerate(model.parameters()):
-            writer.add_scalar(f'TrainGradients/grad_{idx}', p.grad.norm(), epoch)
+            if p.grad is not None:
+                writer.add_scalar(f'TrainGradients/grad_{idx}', p.grad.norm(), epoch)
 
         writer.add_hparams({'lr': scheduler.get_last_lr()[0]},
                            {'accuracy': sum(acc_list) / len(acc_list),
@@ -80,7 +83,7 @@ def test(tensor_board_enabled: bool, dataset_videos_paths: typing.List[str], cat
     for encoder_inputs, labels, paths_idx in test_loader:
         # Get model predictions
         total_labels = np.concatenate((total_labels, labels.numpy()))
-        y_hat = model(encoder_inputs, static_edge_index, static_weight_index)
+        y_hat = model(encoder_inputs)
         # Mean squared error
         loss = loss_fn(y_hat.float(), labels.long())
         total_loss.append(loss.item())
@@ -161,7 +164,7 @@ print("Number of test buckets: ", len(set(test_dataset)))
 
 # Creating Dataloaders
 train_input = np.array(train_dataset.features)  # (1496, 4, 15, 30)
-train_input = np.transpose(train_input, (0, 2, 1, 3))  # (1496, 15, 4, 30)
+train_input = np.transpose(train_input, (0, 1, 3, 2))  # (1496, 15, 4, 30)
 train_x_tensor = torch.from_numpy(train_input).type(torch.FloatTensor).to(DEVICE)  # (L=1496, N=15, F=4, T=30)
 
 train_target = np.array(train_dataset.targets)  # (1496, number_of_gestures)
@@ -175,7 +178,7 @@ train_dataset_new = torch.utils.data.TensorDataset(train_x_tensor, train_target_
 train_loader = torch.utils.data.DataLoader(train_dataset_new, batch_size=batch_size, shuffle=shuffle, drop_last=True)
 
 test_input = np.array(test_dataset.features)  # (425, 4, 15, 10)
-test_input = np.transpose(test_input, (0, 2, 1, 3))  # (425, 15, 4, 10)
+test_input = np.transpose(test_input, (0, 1, 3, 2))  # (425, 15, 4, 10)
 test_x_tensor = torch.from_numpy(test_input).type(torch.FloatTensor).to(DEVICE)  # (B=425, N=15, F=4, T=10)
 
 test_target = np.array(test_dataset.targets)  # (425, 10, 8)
@@ -188,43 +191,6 @@ test_videos_tensor = torch.from_numpy(test_videos).type(torch.IntTensor).to(DEVI
 test_dataset_new = torch.utils.data.TensorDataset(test_x_tensor, test_target_tensor, test_videos_tensor)
 test_loader = torch.utils.data.DataLoader(test_dataset_new, batch_size=batch_size, shuffle=shuffle, drop_last=True)
 
-
-# Making the model 
-class AttentionGCN(torch.nn.Module):
-    def __init__(self, node_features, number_nodes, number_targets, periods, batch):
-        super(AttentionGCN, self).__init__()
-        # Attention Temporal Graph Convolutional Cell
-        self.tgnn = A3TGCN2(in_channels=node_features, out_channels=32, periods=periods,
-                            batch_size=batch)  # node_features=21, periods=16
-        # Equals single-shot prediction
-        self.F = torch.nn.functional
-        self.linear = torch.nn.Linear(32, 1)
-        self.linear2 = torch.nn.Linear(number_nodes, number_targets)
-
-    def forward(self, x, edge_index, edge_weight):
-        """
-        x = Node features for T time steps
-        edge_index = Graph edge indices
-        [b=batch, number_nodes, node_features, frames]
-        """
-        h = self.tgnn(x, edge_index, edge_weight)  # [b=batch, number_nodes, out_channels]
-        h = self.F.relu(h)
-        h = self.linear(h)  # [b=batch, number_nodes, 1]
-        h = torch.squeeze(h, 2)  # [b=batch, number_nodes]
-        h = self.linear2(h)  # [b=batch, number_targets]
-        return h
-
-
-# Create model and optimizers
-model = AttentionGCN(node_features=4, number_nodes=loader.number_nodes, number_targets=loader.number_targets,
-                     periods=loader.number_frames, batch=batch_size).to(DEVICE)
-# model = GMAN(L=1, K=8, d=8, num_his=12, bn_decay=0.1, steps_per_day= 288, use_bias=True, mask=False)
-# model.load_state_dict(torch.load("C:\_Projects\IRIGesture\A3TGCN2_Checkpoints\Epoch_29.pth"))
-
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.05)
-loss_fn = torch.nn.CrossEntropyLoss()
-
 # Loading the graph once because it's a static graph
 static_edge_index = 0
 static_weight_index = 0
@@ -232,6 +198,14 @@ for snapshot in train_dataset:
     static_edge_index = snapshot.edge_index.to(DEVICE)
     static_weight_index = snapshot.edge_attr.to(DEVICE)
     break
+
+# Create model and optimize
+model = AAGCN(in_channels=4, out_channels=loader.number_targets, edge_index=static_edge_index,
+              num_nodes=loader.number_nodes)
+
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+loss_fn = torch.nn.CrossEntropyLoss()
 
 writer = SummaryWriter(log_dir=os.path.join('tensorboard/runs', f'{input("Add TensorBoard RUN Name")}'))
 
