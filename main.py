@@ -15,9 +15,10 @@ from sklearn.metrics import confusion_matrix
 from torch.utils.data import TensorDataset
 from torch.backends import cudnn
 from torch.utils.tensorboard import SummaryWriter
+from utils.temporal_dataset_split import temporal_dataset_split
 
 from dataset.IRIDatasetTemporal import IRIGestureTemporal
-from model.AAGCN import AAGCN
+from model.AAGCN import Classifier
 
 
 def train(tensor_board_enabled: bool, categories: typing.List[str]):
@@ -132,7 +133,7 @@ def __read_video(video_path: str) -> torch.Tensor:
 
 def __create_confusion_matrix(y_pred, y_true, classes, title):
     # Build confusion matrix
-    cf_matrix = confusion_matrix(y_true, y_pred)
+    cf_matrix = confusion_matrix(y_true, y_pred, labels=[*range(len(classes))])
     df_cm = pd.DataFrame(cf_matrix / np.sum(cf_matrix) * 10, index=[i for i in classes],
                          columns=[i for i in classes])
 
@@ -152,9 +153,11 @@ DEVICE = torch.device('cpu')
 shuffle = True
 batch_size = 64
 
-loader = IRIGestureTemporal(os.path.join(Path().absolute(), 'dataset'), alsoDownloadVideos=True)
+loader = IRIGestureTemporal(os.path.join(Path().absolute(), 'dataset'), alsoDownloadVideos=True,
+                            categories=['attention', 'right', 'left', 'stop', 'yes', 'shrug', 'static'])
 dataset = loader.get_all_dataset()
-train_dataset, test_dataset = loader.get_dataset()
+# train_dataset, test_dataset = loader.get_dataset()
+train_dataset, test_dataset = temporal_dataset_split(dataset, train_ratio=0.95)
 
 print("Dataset type:  ", dataset)
 print("Number of samples / sequences: ", len(set(dataset)))
@@ -200,8 +203,7 @@ for snapshot in train_dataset:
     break
 
 # Create model and optimize
-model = AAGCN(in_channels=4, out_channels=loader.number_targets, edge_index=static_edge_index,
-              num_nodes=loader.number_nodes)
+model = Classifier(edge_index=static_edge_index)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
