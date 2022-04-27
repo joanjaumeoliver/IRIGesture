@@ -27,13 +27,13 @@ Additional_Features = List[np.ndarray]
 
 class CustomDynamicGraphTemporalSignal(DynamicGraphTemporalSignal):
     def __init__(self,
-                 videos,
+                 videos_path,
                  edge_indices: Edge_Indices,
                  edge_weights: Edge_Weights,
                  features: Node_Features,
                  targets: Targets,
                  **kwargs: Additional_Features):
-        self.videos_paths = videos
+        self.videos_paths = videos_path
         super(CustomDynamicGraphTemporalSignal, self).__init__(edge_indices, edge_weights, features, targets, **kwargs)
 
 
@@ -85,6 +85,8 @@ class IRIGestureTemporal(InMemoryDataset):
     __test_targets = []
     __test_features = []
     __test_videos = []
+
+    __videos = []
 
     __nodes_to_use = [0,  # nose
                       # 1,       # left_eye_inner
@@ -170,6 +172,7 @@ class IRIGestureTemporal(InMemoryDataset):
                                                            f'{self.dataTypes[:3]}_trtrgs.pt'))
             self.__test_videos = torch.load(os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_tsvids.pt'))
             self.__train_videos = torch.load(os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_trvids.pt'))
+            self.__videos = torch.load(os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_vids.pt'))
             self.CCO = torch.load(os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_CCO.pt'))
             self.__totalElements = torch.load(os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_tels.pt'))
 
@@ -319,6 +322,8 @@ class IRIGestureTemporal(InMemoryDataset):
                         self.__train_features.append(x)
                         self.__train_videos.append(output_video_path)
 
+                    self.__videos.append(output_video_path)
+
                     x = np.swapaxes(x, 0, 2)
                     x = torch.tensor(x, dtype=torch.float)  # [number_of_frames, number_nodes, 4]
 
@@ -356,6 +361,7 @@ class IRIGestureTemporal(InMemoryDataset):
         torch.save(self.__train_targets, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_trtrgs.pt'))
         torch.save(self.__test_videos, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_tsvids.pt'))
         torch.save(self.__train_videos, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_trvids.pt'))
+        torch.save(self.__videos, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_vids.pt'))
         torch.save(self.CCO, os.path.join(self.processed_dir, f'{self.dataTypes[:3]}_CCO.pt'))
 
         self.__totalElements = len(data_list)
@@ -389,7 +395,7 @@ class IRIGestureTemporal(InMemoryDataset):
 
         return train_dataset, test_dataset
 
-    def get_all_dataset(self) -> DynamicGraphTemporalSignal:
+    def get_all_dataset(self) -> CustomDynamicGraphTemporalSignal:
         """Returning the IRIGesture data iterator.
 
         Args types:
@@ -397,7 +403,8 @@ class IRIGestureTemporal(InMemoryDataset):
         Return types:
             * **dataset** *(DynamicGraphTemporalSignal)* - The IRIGestureTemporal dataset.
         """
-        dataset = DynamicGraphTemporalSignal(
+        dataset = CustomDynamicGraphTemporalSignal(
+            self.__videos,
             self.__get_edges(),  # List of CCO [2, self.number_nodes**2]
             self.__get_edge_weights(),  # List of ones (self.number_nodes**2, )
             self.features,  # List each item (4, self.number_nodes, frames)
