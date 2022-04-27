@@ -1,11 +1,10 @@
 import math
+
 import torch
-import numpy as np
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.autograd import Variable
 from torch_geometric.utils.to_dense_adj import to_dense_adj
-import torch.nn.functional as F
-from torch_geometric.nn.conv import GATv2Conv
 
 
 class GraphAAGCN:
@@ -51,7 +50,7 @@ class UnitTCN(nn.Module):
     """
 
     def __init__(
-        self, in_channels: int, out_channels: int, kernel_size: int = 9, stride: int = 1
+            self, in_channels: int, out_channels: int, kernel_size: int = 9, stride: int = 1
     ):
         super(UnitTCN, self).__init__()
         pad = int((kernel_size - 1) / 2)
@@ -100,14 +99,14 @@ class UnitGCN(nn.Module):
     """
 
     def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        A: torch.FloatTensor,
-        coff_embedding: int = 4,
-        num_subset: int = 3,
-        adaptive: bool = True,
-        attention: bool = True,
+            self,
+            in_channels: int,
+            out_channels: int,
+            A: torch.FloatTensor,
+            coff_embedding: int = 4,
+            num_subset: int = 3,
+            adaptive: bool = True,
+            attention: bool = True,
     ):
         super(UnitGCN, self).__init__()
         self.inter_c = out_channels // coff_embedding
@@ -231,9 +230,9 @@ class UnitGCN(nn.Module):
         for i in range(self.num_subset):
             A1 = (
                 self.conv_a[i](x)
-                .permute(0, 3, 1, 2)
-                .contiguous()
-                .view(N, V, self.inter_c * T)
+                    .permute(0, 3, 1, 2)
+                    .contiguous()
+                    .view(N, V, self.inter_c * T)
             )
             A2 = self.conv_b[i](x).view(N, self.inter_c * T, V)
             A1 = self.tan(torch.matmul(A1, A2) / A1.size(-1))  # N V V
@@ -290,15 +289,15 @@ class AAGCN(nn.Module):
     """
 
     def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        edge_index: torch.LongTensor,
-        num_nodes: int,
-        stride: int = 1,
-        residual: bool = True,
-        adaptive: bool = True,
-        attention: bool = True,
+            self,
+            in_channels: int,
+            out_channels: int,
+            edge_index: torch.LongTensor,
+            num_nodes: int,
+            stride: int = 1,
+            residual: bool = True,
+            adaptive: bool = True,
+            attention: bool = True,
     ):
         super(AAGCN, self).__init__()
         self.edge_index = edge_index
@@ -325,10 +324,6 @@ class AAGCN(nn.Module):
                 in_channels, out_channels, kernel_size=1, stride=stride
             )
 
-        self.linear = torch.nn.Linear(30*15, out_channels)
-
-        self.Conv2D = nn.Conv2d(in_channels, out_channels, 1)
-
     def forward(self, x):
         """
         Making a forward pass.
@@ -341,8 +336,45 @@ class AAGCN(nn.Module):
             * **X** (PyTorch FloatTensor)* - Sequence of node features,
             with shape (B, out_channels, T_in//stride, N_nodes).
         """
+        y = self.relu(self.tcn1(self.gcn1(x)) + self.residual(x))
+        return y
+
+
+class Classifier(nn.Module):
+
+    def __init__(
+            self,
+            edge_index: torch.LongTensor,
+            in_channels: int = 4,
+            out_channels: int = 8,
+            num_nodes: int = 15,
+            num_subsets: int = 7,
+    ):
+        super(Classifier, self).__init__()
+        # For loop
+        self.initialAAGCN = AAGCN(in_channels, 64, edge_index, num_nodes,
+                                  stride=1, residual=True, adaptive=True, attention=True)
+
+        self.middleAAGCN = nn.ModuleList()
+        for i in range(num_subsets):
+            self.middleAAGCN.append(AAGCN(64, 64, edge_index, num_nodes,
+                                          stride=1, residual=True, adaptive=True, attention=True))
+
+        self.finalAAGCN = AAGCN(64, out_channels, edge_index, num_nodes,
+                                stride=1, residual=True, adaptive=True, attention=True)
+
+        self.linear = torch.nn.Linear(30 * 15, out_channels)
+
+    def forward(self, x):
         # x = [64, 4, 30, 15]
-        y = self.relu(self.tcn1(self.gcn1(x)) + self.residual(x))  # y = [64, 8, 30, 15]
+        y = self.initialAAGCN(x)  # y = [64, 64, 30, 15]
+
+        for i in range(len(self.middleAAGCN)):
+            y = self.middleAAGCN[i](y)  # y = [64, 64, 30, 15]
+
+        y = self.finalAAGCN(y)  # y = [64, 8, 30, 15]
+        # Test Stride = 1 in final AAGCN
+
         values, _ = torch.max(y.data, 1)  # values = [64, 30, 15]
         flatten_values = torch.flatten(values, 1)
         y_pred = self.linear(flatten_values)
