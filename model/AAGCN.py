@@ -348,7 +348,7 @@ class Classifier(nn.Module):
             in_channels: int = 4,
             out_channels: int = 8,
             num_nodes: int = 15,
-            num_subsets: int = 7,
+            num_subsets: int = 15,
     ):
         super(Classifier, self).__init__()
         # For loop
