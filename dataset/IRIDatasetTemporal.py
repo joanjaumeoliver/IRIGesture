@@ -1,33 +1,34 @@
+import base64
+import glob
 import os
 import re
-import glob
-import base64
 import shutil
+from typing import List, Union
 from typing import Tuple
+
 import cv2
 import mediapipe as mp
 import numpy as np
-from typing import List, Union
-
-# Imports needed for GitHub dataset downloading.
+import torch
 from github import Github
 from github import GithubException
-
-# Imports for PyTorch Geometric Dataset class.
-import torch
+from torch import default_generator, randperm
 from torch_geometric.data import (InMemoryDataset, Data)
 from torch_geometric_temporal.signal import DynamicGraphTemporalSignal
+
+import utils.tools as tools
 
 Edge_Indices = List[Union[np.ndarray, None]]
 Edge_Weights = List[Union[np.ndarray, None]]
 Node_Features = List[Union[np.ndarray, None]]
 Targets = List[Union[np.ndarray, None]]
 Additional_Features = List[np.ndarray]
+Videos_Path = List[Union[str, None]]
 
 
 class CustomDynamicGraphTemporalSignal(DynamicGraphTemporalSignal):
     def __init__(self,
-                 videos_path,
+                 videos_path: Videos_Path,
                  edge_indices: Edge_Indices,
                  edge_weights: Edge_Weights,
                  features: Node_Features,
@@ -35,6 +36,15 @@ class CustomDynamicGraphTemporalSignal(DynamicGraphTemporalSignal):
                  **kwargs: Additional_Features):
         self.videos_paths = videos_path
         super(CustomDynamicGraphTemporalSignal, self).__init__(edge_indices, edge_weights, features, targets, **kwargs)
+
+    def shuffle(self):
+        indices = randperm(self.snapshot_count, generator=default_generator).tolist()
+
+        self.videos_paths = tools.sort_list_by_indices(self.videos_paths, indices)
+        self.edge_indices = tools.sort_list_by_indices(self.edge_indices, indices)
+        self.edge_weights = tools.sort_list_by_indices(self.edge_weights, indices)
+        self.features = tools.sort_list_by_indices(self.features, indices)
+        self.targets = tools.sort_list_by_indices(self.targets, indices)
 
 
 class IRIGestureTemporal(InMemoryDataset):
@@ -73,20 +83,9 @@ class IRIGestureTemporal(InMemoryDataset):
     __owner = "RamonRL"
     __repo = "GESTURE-PROJECT"
     __serverPath = "dataset/BodyGestureDataset"
-    __categories = ['attention', 'right', 'left', 'stop', 'yes', 'shrug', 'random', 'static']
+
+    __categoriesStatic = ['attention', 'right', 'left', 'stop', 'yes', 'shrug', 'random']
     __categoriesDynamic = ['greeting', 'continue', 'turnback', 'no', 'slowdown', 'come', 'back']
-    __token = os.environ.get("GITHUB_TOKEN", None)
-    __processed = False
-
-    __train_features = []
-    __train_targets = []
-    __train_videos = []
-
-    __test_targets = []
-    __test_features = []
-    __test_videos = []
-
-    __videos = []
 
     __nodes_to_use = [0,  # nose
                       # 1,       # left_eye_inner
@@ -123,19 +122,16 @@ class IRIGestureTemporal(InMemoryDataset):
                       # 32]      # right_foot_index
                       ]
 
-    number_nodes = 15
-    number_targets = -1
-    number_frames = 30
-    frames_gap = 3
-    __testSubject = 'S2'
-    alsoDownloadVideos = False
-
-    def __init__(self, root, dataTypes="Static", testSubject="S2", alsoDownloadVideos=False, token=None,
-                 categories=None,
+    def __init__(self, root, dataTypes="All", testSubject="S2", token=None, categories=None,
                  transform=None, pre_transform=None, pre_filter=None):
+
+        self.__processed = False
 
         if dataTypes == "Dynamic":
             self.StaticData = False
+            self.DynamicData = True
+        elif dataTypes == 'All':
+            self.StaticData = True
             self.DynamicData = True
         else:
             self.StaticData = True
@@ -143,21 +139,32 @@ class IRIGestureTemporal(InMemoryDataset):
 
         self.dataTypes = dataTypes
         self.__testSubject = testSubject
-        self.alsoDownloadVideos = alsoDownloadVideos
+        self.alsoDownloadVideos = True
 
-        token = self.__token if token is None else token
-        self.__token = token
+        self.__token = os.environ.get("GITHUB_TOKEN", None) if token is None else token
 
+        self.__categories = []
         if categories is not None:
             categories = [gestures.lower() for gestures in categories]
-            for gestures in categories:
-                assert gestures in self.__categories
-            self.__categories = categories
+            for gesture in categories:
+                if self.__categoriesStatic.__contains__(gesture) and self.StaticData or\
+                        self.__categoriesDynamic.__contains__(gesture) and self.DynamicData:
+                    self.__categories.append(gesture)
         else:
             if self.DynamicData:
                 self.__categories = self.__categoriesDynamic
+            elif self.StaticData:
+                self.__categories = self.__categoriesStatic
+            else:
+                self.__categories.extend(self.__categoriesStatic)
+                self.__categories.extend(self.__categoriesDynamic)
 
         self.number_targets = len(self.__categories)
+        self.number_nodes = len(self.__nodes_to_use)
+
+        # Video configurations
+        self.number_frames = 30
+        self.frames_gap = 3
 
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
@@ -252,8 +259,9 @@ class IRIGestureTemporal(InMemoryDataset):
         self.__train_targets = []
         self.__test_videos = []
         self.__train_videos = []
+        self.__videos = []
 
-        # We create an extremly connected graph.
+        # We create an extremely connected graph.
         self.CCO = np.swapaxes([[i, j] for i in range(0, self.number_nodes) for j in range(0, self.number_nodes)], 0, 1)
 
         for gesture in self.__categories:

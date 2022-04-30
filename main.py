@@ -1,27 +1,22 @@
-import random
-import typing
-
-import numpy as np
 import os
-
-import pandas as pd
-import seaborn as sn
-import torch
-import torch.nn.functional
+import random
+import shutil
+import typing
 from pathlib import Path
 
-import torchvision.io
-from sklearn.metrics import confusion_matrix
+import numpy as np
+import torch
+import torch.nn.functional
 from torch.utils.data import TensorDataset
-from torch.backends import cudnn
 from torch.utils.tensorboard import SummaryWriter
-from utils.temporal_dataset_split import temporal_dataset_split
 
+import utils.tools as tools
 from dataset.IRIDatasetTemporal import IRIGestureTemporal
 from model.AAGCN import Classifier
+from utils.temporal_dataset_split import temporal_dataset_split
 
 
-def train(tensor_board_enabled: bool, categories: typing.List[str]):
+def train(categories: typing.List[str], tensorboard_name: str):
     step = 0
     loss_list = []
     acc_list = []
@@ -54,26 +49,24 @@ def train(tensor_board_enabled: bool, categories: typing.List[str]):
     print("Epoch {} train CrossEntropyLoss: {:.4f} Acc: {:.4f}".format(epoch, sum(loss_list) / len(loss_list),
                                                                        sum(acc_list) / len(acc_list)))
 
-    if tensor_board_enabled:
-        writer.add_figure("TrainConfusionMatrix", __create_confusion_matrix(total_guesses, total_labels, categories,
-                                                                            f'Train-Epoch:{epoch}'),
-                          epoch)
-        writer.add_scalar('Loss/Train', sum(loss_list) / len(loss_list), epoch)
-        writer.add_scalar('Accuracy/Train', sum(acc_list) / len(acc_list), epoch)
+    writer.add_figure("TrainConfusionMatrix", tools.__create_confusion_matrix(total_guesses, total_labels, categories,
+                                                                              f'Train-Epoch:{epoch}'), epoch)
+    writer.add_scalar('Loss/Train', sum(loss_list) / len(loss_list), epoch)
+    writer.add_scalar('Accuracy/Train', sum(acc_list) / len(acc_list), epoch)
 
-        for idx, p in enumerate(model.parameters()):
-            if p.grad is not None:
-                writer.add_scalar(f'TrainGradients/grad_{idx}', p.grad.norm(), epoch)
+    for idx, p in enumerate(model.parameters()):
+        if p.grad is not None:
+            writer.add_scalar(f'TrainGradients/grad_{idx}', p.grad.norm(), epoch)
 
-        writer.add_hparams({'lr': scheduler.get_last_lr()[0]},
-                           {'accuracy': sum(acc_list) / len(acc_list),
-                            'loss': sum(loss_list) / len(loss_list)})
+    writer.add_hparams({'lr': scheduler.get_last_lr()[0]},
+                       {'accuracy': sum(acc_list) / len(acc_list),
+                        'loss': sum(loss_list) / len(loss_list)})
 
-    torch.save(model.state_dict(), os.path.join(Path().absolute(), 'checkpoints', 'A3TGCN2_Checkpoints',
+    torch.save(model.state_dict(), os.path.join(Path().absolute(), 'checkpoints', f'{tensorboard_name}_Checkpoints',
                                                 'Epoch_' + str(epoch) + '.pth'))
 
 
-def test(tensor_board_enabled: bool, dataset_videos_paths: typing.List[str], categories: typing.List[str]):
+def test(dataset_videos_paths: typing.List[str], categories: typing.List[str]):
     model.eval()
     batch = 0
     # Store for analysis
@@ -97,66 +90,37 @@ def test(tensor_board_enabled: bool, dataset_videos_paths: typing.List[str], cat
         acc = corrects.sum() / len(corrects)
         total_acc.append(acc.numpy())
 
-        if tensor_board_enabled:
-            video_idx = random.choice(paths_idx.tolist())
-            idx = np.where(paths_idx.numpy() == video_idx)
-            video_path = dataset_videos_paths[video_idx]
-            video_name = os.path.splitext(os.path.basename(video_path))[0]
-            video_label = categories[int(labels.numpy()[idx])]
-            guessed_label = categories[int(guessed_list.numpy()[idx])]
+        video_idx = random.choice(paths_idx.tolist())
+        idx = np.where(paths_idx.numpy() == video_idx)
+        video_path = dataset_videos_paths[video_idx]
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+        video_label = categories[int(labels.numpy()[idx])]
+        guessed_label = categories[int(guessed_list.numpy()[idx])]
 
-            writer.add_video(f'{video_label}/{video_name}', __read_video(video_path), batch)
-            writer.add_text(f'{video_label}/{video_name}',
-                            f'Guessed {guessed_label}', batch)
+        writer.add_video(f'{video_label}/{video_name}', tools.__read_video(video_path), batch)
+        writer.add_text(f'{video_label}/{video_name}',
+                        f'Guessed {guessed_label}', batch)
 
         batch += 1
 
     print('Test CrossEntropyLoss: {:.4f} Acc: {:.4f}'.format(sum(total_loss) / len(total_loss),
                                                              sum(total_acc) / len(total_acc)))
-    if tensor_board_enabled:
-        writer.add_figure("TestConfusionMatrix", __create_confusion_matrix(total_guesses, total_labels, categories,
-                                                                           f'Test-Epoch:{epoch}'),
-                          epoch)
-        writer.add_scalar('Loss/Test', sum(total_loss) / len(total_loss), epoch)
-        writer.add_scalar('Accuracy/Test', sum(total_acc) / len(total_acc), epoch)
+    writer.add_figure("TestConfusionMatrix", tools.__create_confusion_matrix(total_guesses, total_labels, categories,
+                                                                             f'Test-Epoch:{epoch}'), epoch)
+    writer.add_scalar('Loss/Test', sum(total_loss) / len(total_loss), epoch)
+    writer.add_scalar('Accuracy/Test', sum(total_acc) / len(total_acc), epoch)
 
 
-def __read_video(video_path: str) -> torch.Tensor:
-    """
-    Read a video with 4D tensor dimensions [time(frame), new_width, new_height, channel]
-    and converts it to a 5D tensor [batch-size, time(frame), channel(color), height, width].
-    """
-    original_video = torchvision.io.read_video(video_path)
-    video = np.transpose(original_video[0].numpy()[..., np.newaxis], (4, 0, 3, 1, 2))
-    return torch.from_numpy(video)
-
-
-def __create_confusion_matrix(y_pred, y_true, classes, title):
-    # Build confusion matrix
-    cf_matrix = confusion_matrix(y_true, y_pred, labels=[*range(len(classes))])
-    df_cm = pd.DataFrame(cf_matrix / np.sum(cf_matrix) * 10, index=[i for i in classes],
-                         columns=[i for i in classes])
-
-    s = sn.heatmap(df_cm, annot=True)
-    s.set(title=title)
-    return s.get_figure()
-
-
-seed = 1997
-np.random.seed(seed)
-torch.manual_seed(seed)
-torch.cuda.manual_seed(seed)
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = True
+tools.seed_everything()
 
 DEVICE = torch.device('cpu')
 shuffle = True
 batch_size = 64
 
-loader = IRIGestureTemporal(os.path.join(Path().absolute(), 'dataset'), alsoDownloadVideos=True,
-                            categories=['attention', 'right', 'left', 'stop', 'yes', 'shrug', 'static'])
+loader = IRIGestureTemporal(os.path.join(Path().absolute(), 'dataset'), dataTypes="Static",
+                            categories=['attention', 'right', 'left', 'stop', 'yes', 'shrug'])
 dataset = loader.get_all_dataset()
-# train_dataset, test_dataset = loader.get_dataset()
+dataset.shuffle()
 train_dataset, test_dataset = temporal_dataset_split(dataset, train_ratio=0.95)
 
 print("Dataset type:  ", dataset)
@@ -165,7 +129,7 @@ print("Number of samples / sequences: ", len(set(dataset)))
 print("Number of train buckets: ", len(set(train_dataset)))
 print("Number of test buckets: ", len(set(test_dataset)))
 
-# Creating Dataloaders
+# Creating Data loaders
 train_input = np.array(train_dataset.features)  # (1496, 4, 15, 30)
 train_input = np.transpose(train_input, (0, 1, 3, 2))  # (1496, 15, 4, 30)
 train_x_tensor = torch.from_numpy(train_input).type(torch.FloatTensor).to(DEVICE)  # (L=1496, N=15, F=4, T=30)
@@ -209,19 +173,24 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 loss_fn = torch.nn.CrossEntropyLoss()
 
-writer = SummaryWriter(log_dir=os.path.join('tensorboard/runs', f'{input("Add TensorBoard RUN Name")}'))
+run_name = f'{input("Add TensorBoard RUN Name")}'
+
+path = os.path.join(Path().absolute(), 'checkpoints', f'{run_name}_Checkpoints')
+if os.path.exists(path):
+    shutil.rmtree(path)
+os.makedirs(path)
+
+writer = SummaryWriter(log_dir=os.path.join('tensorboard/runs', run_name))
 
 model.train()
 epoch = 0
 max_epochs = 3000
 while True:
     if epoch < max_epochs:
-        train(tensor_board_enabled=True,
-              categories=loader.categories)
+        train(categories=loader.categories, tensorboard_name=run_name)
         epoch += 1
         if epoch % 25 == 0:
-            test(tensor_board_enabled=True,
-                 dataset_videos_paths=test_dataset.videos_paths,
+            test(dataset_videos_paths=test_dataset.videos_paths,
                  categories=loader.categories)
             model.train()
     elif input("Do you want to exit?") == 'Yes':
