@@ -64,8 +64,7 @@ class IRIGestureTemporal(InMemoryDataset):
             variable)
         categories (list, optional): List of categories to include in the
             dataset. Can include the categories :obj:`"attention"`, :obj:`"right"`,
-            :obj:`"left"`, :obj:`"stop"`, :obj:`"yes"`, :obj:`"shrug"`,
-            :obj:`"random"`, :obj:`"static"`. If set to
+            :obj:`"left"`, :obj:`"stop"`, :obj:`"yes"`, :obj:`"shrug"`. If set to
             :obj:`None`, the dataset will contain all categories. (default:
             :obj:`None`)
         transform (callable, optional): A function/transform that takes in an
@@ -86,7 +85,7 @@ class IRIGestureTemporal(InMemoryDataset):
     __repo = "GESTURE-PROJECT"
     __serverPath = "dataset/BodyGestureDataset"
 
-    __categoriesStatic = ['attention', 'right', 'left', 'stop', 'yes', 'shrug', 'random']
+    __categoriesStatic = ['attention', 'right', 'left', 'stop', 'yes', 'shrug']  # , 'static', 'random']
     __categoriesDynamic = ['greeting', 'continue', 'turnback', 'no', 'slowdown', 'come', 'back']
 
     __nodes_to_use = [0,  # nose
