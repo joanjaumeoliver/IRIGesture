@@ -85,6 +85,7 @@ class IRIGestureTemporal(InMemoryDataset):
     __repo = "GESTURE-PROJECT"
     __serverPath = "dataset/BodyGestureDataset"
 
+    __categories = []
     __categoriesStatic = ['attention', 'right', 'left', 'stop', 'yes', 'shrug']  # , 'static', 'random']
     __categoriesDynamic = ['greeting', 'continue', 'turnback', 'no', 'slowdown', 'come', 'back']
 
@@ -144,7 +145,6 @@ class IRIGestureTemporal(InMemoryDataset):
 
         self.__token = os.environ.get("GITHUB_TOKEN", None) if token is None else token
 
-        self.__categories = []
         if categories is not None:
             categories = [gestures.lower() for gestures in categories]
             for gesture in categories:
@@ -209,6 +209,10 @@ class IRIGestureTemporal(InMemoryDataset):
         # We generate a *.pt file with name composition of each gesture.
         name = '_'.join([gesture[:2] for gesture in self.__categories])
         return f'{self.dataTypes[:3]}_{str(self.alsoDownloadVideos)[:1]}_{name}.pt'
+
+    @property
+    def categories(self):
+        return self.__categories
 
     def download(self):
         git = Github(self.__token)
