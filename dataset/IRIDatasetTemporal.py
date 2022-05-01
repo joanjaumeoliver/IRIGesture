@@ -46,6 +46,9 @@ class CustomDynamicGraphTemporalSignal(DynamicGraphTemporalSignal):
         self.features = tools.sort_list_by_indices(self.features, indices)
         self.targets = tools.sort_list_by_indices(self.targets, indices)
 
+    def get_static_edge_index(self):
+        return self.__get_item__(0).edge_index
+
 
 class IRIGestureTemporal(InMemoryDataset):
     r"""The IRIGesture dataset
@@ -59,7 +62,6 @@ class IRIGestureTemporal(InMemoryDataset):
         token (string, optional): GitHub token needed in order to download 
             IRIGesture dataset. (By default uses 'GITHUB_TOKEN' environment 
             variable)
-        alsoDownloadVideos (bool, optional): If set to true, videos would also be downloaded from GitHub.
         categories (list, optional): List of categories to include in the
             dataset. Can include the categories :obj:`"attention"`, :obj:`"right"`,
             :obj:`"left"`, :obj:`"stop"`, :obj:`"yes"`, :obj:`"shrug"`,
