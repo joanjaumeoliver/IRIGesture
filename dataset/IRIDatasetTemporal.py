@@ -152,9 +152,9 @@ class IRIGestureTemporal(InMemoryDataset):
                         self.__categoriesDynamic.__contains__(gesture) and self.DynamicData:
                     self.__categories.append(gesture)
         else:
-            if self.DynamicData:
+            if self.DynamicData and not self.StaticData:
                 self.__categories = self.__categoriesDynamic
-            elif self.StaticData:
+            elif self.StaticData and not self.DynamicData:
                 self.__categories = self.__categoriesStatic
             else:
                 self.__categories.extend(self.__categoriesStatic)
