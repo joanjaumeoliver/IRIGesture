@@ -1,19 +1,16 @@
 import os
 import random
-import shutil
 import typing
 from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn.functional
-from torch.utils.data import TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 
 import utils.tools as tools
 from dataset.IRIDatasetTemporal import IRIGestureTemporal
 from model.AAGCN import Classifier
-from utils.temporal_dataset_split import temporal_dataset_split
 
 
 def train(categories: typing.List[str], tensorboard_name: str):
@@ -49,8 +46,8 @@ def train(categories: typing.List[str], tensorboard_name: str):
     print("Epoch {} train CrossEntropyLoss: {:.4f} Acc: {:.4f}".format(epoch, sum(loss_list) / len(loss_list),
                                                                        sum(acc_list) / len(acc_list)))
 
-    writer.add_figure("TrainConfusionMatrix", tools.__create_confusion_matrix(total_guesses, total_labels, categories,
-                                                                              f'Train-Epoch:{epoch}'), epoch)
+    writer.add_figure("TrainConfusionMatrix", tools.create_confusion_matrix(total_guesses, total_labels, categories,
+                                                                            f'Train-Epoch:{epoch}'), epoch)
     writer.add_scalar('Loss/Train', sum(loss_list) / len(loss_list), epoch)
     writer.add_scalar('Accuracy/Train', sum(acc_list) / len(acc_list), epoch)
 
@@ -97,7 +94,7 @@ def test(dataset_videos_paths: typing.List[str], categories: typing.List[str]):
         video_label = categories[int(labels.numpy()[idx])]
         guessed_label = categories[int(guessed_list.numpy()[idx])]
 
-        writer.add_video(f'{video_label}/{video_name}', tools.__read_video(video_path), batch)
+        writer.add_video(f'{video_label}/{video_name}', tools.read_video(video_path), batch)
         writer.add_text(f'{video_label}/{video_name}',
                         f'Guessed {guessed_label}', batch)
 
@@ -105,8 +102,8 @@ def test(dataset_videos_paths: typing.List[str], categories: typing.List[str]):
 
     print('Test CrossEntropyLoss: {:.4f} Acc: {:.4f}'.format(sum(total_loss) / len(total_loss),
                                                              sum(total_acc) / len(total_acc)))
-    writer.add_figure("TestConfusionMatrix", tools.__create_confusion_matrix(total_guesses, total_labels, categories,
-                                                                             f'Test-Epoch:{epoch}'), epoch)
+    writer.add_figure("TestConfusionMatrix", tools.create_confusion_matrix(total_guesses, total_labels, categories,
+                                                                           f'Test-Epoch:{epoch}'), epoch)
     writer.add_scalar('Loss/Test', sum(total_loss) / len(total_loss), epoch)
     writer.add_scalar('Accuracy/Test', sum(total_acc) / len(total_acc), epoch)
 
@@ -115,13 +112,13 @@ tools.seed_everything()
 
 DEVICE = torch.device('cpu')
 shuffle = True
-batch_size = 64
+batch_size = 32
 
 loader = IRIGestureTemporal(os.path.join(Path().absolute(), 'dataset'), dataTypes="Static",
                             categories=['attention', 'right', 'left', 'stop', 'yes', 'shrug'])
 dataset = loader.get_all_dataset()
 dataset.shuffle()
-train_dataset, test_dataset = temporal_dataset_split(dataset, train_ratio=0.95)
+train_dataset, test_dataset = tools.temporal_dataset_split(dataset, train_ratio=0.95)
 
 print("Dataset type:  ", dataset)
 print("Number of samples / sequences: ", len(set(dataset)))
@@ -130,56 +127,18 @@ print("Number of train buckets: ", len(set(train_dataset)))
 print("Number of test buckets: ", len(set(test_dataset)))
 
 # Creating Data loaders
-train_input = np.array(train_dataset.features)  # (1496, 4, 15, 30)
-train_input = np.transpose(train_input, (0, 1, 3, 2))  # (1496, 15, 4, 30)
-train_x_tensor = torch.from_numpy(train_input).type(torch.FloatTensor).to(DEVICE)  # (L=1496, N=15, F=4, T=30)
-
-train_target = np.array(train_dataset.targets)  # (1496, number_of_gestures)
-train_target = np.argmax(train_target, axis=1)
-train_target_tensor = torch.from_numpy(train_target).type(torch.FloatTensor).to(DEVICE)  # (L=1669, 1)
-
-train_videos = np.linspace(0, len(train_dataset.videos_paths), len(train_dataset.videos_paths), False)
-train_videos_tensor = torch.from_numpy(train_videos).type(torch.IntTensor).to(DEVICE)
-
-train_dataset_new = torch.utils.data.TensorDataset(train_x_tensor, train_target_tensor, train_videos_tensor)
-train_loader = torch.utils.data.DataLoader(train_dataset_new, batch_size=batch_size, shuffle=shuffle, drop_last=True)
-
-test_input = np.array(test_dataset.features)  # (425, 4, 15, 10)
-test_input = np.transpose(test_input, (0, 1, 3, 2))  # (425, 15, 4, 10)
-test_x_tensor = torch.from_numpy(test_input).type(torch.FloatTensor).to(DEVICE)  # (B=425, N=15, F=4, T=10)
-
-test_target = np.array(test_dataset.targets)  # (425, 10, 8)
-test_target = np.argmax(test_target, axis=1)
-test_target_tensor = torch.from_numpy(test_target).type(torch.FloatTensor).to(DEVICE)  # (B=425, T=10)
-
-test_videos = np.linspace(0, len(test_dataset.videos_paths), len(test_dataset.videos_paths), False)
-test_videos_tensor = torch.from_numpy(test_videos).type(torch.IntTensor).to(DEVICE)
-
-test_dataset_new = torch.utils.data.TensorDataset(test_x_tensor, test_target_tensor, test_videos_tensor)
-test_loader = torch.utils.data.DataLoader(test_dataset_new, batch_size=batch_size, shuffle=shuffle, drop_last=True)
-
-# Loading the graph once because it's a static graph
-static_edge_index = 0
-static_weight_index = 0
-for snapshot in train_dataset:
-    static_edge_index = snapshot.edge_index.to(DEVICE)
-    static_weight_index = snapshot.edge_attr.to(DEVICE)
-    break
+train_loader = tools.create_data_loaders(train_dataset, batch_size, shuffle, DEVICE)
+test_loader = tools.create_data_loaders(test_dataset, batch_size, shuffle, DEVICE)
 
 # Create model and optimize
-model = Classifier(edge_index=static_edge_index)
+model = Classifier(edge_index=train_dataset.get_static_edge_index().to(DEVICE))
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 loss_fn = torch.nn.CrossEntropyLoss()
 
 run_name = f'{input("Add TensorBoard RUN Name")}'
-
-path = os.path.join(Path().absolute(), 'checkpoints', f'{run_name}_Checkpoints')
-if os.path.exists(path):
-    shutil.rmtree(path)
-os.makedirs(path)
-
+tools.clear_path(os.path.join(Path().absolute(), 'checkpoints', f'{run_name}_Checkpoints'))
 writer = SummaryWriter(log_dir=os.path.join('tensorboard/runs', run_name))
 
 model.train()
