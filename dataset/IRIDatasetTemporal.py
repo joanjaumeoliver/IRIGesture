@@ -187,15 +187,21 @@ class IRIGestureTemporal(InMemoryDataset):
     @property
     def raw_file_names(self):
         # We look for two random files in order to decide if dataset needs to be downloaded.
-        if self.StaticData:
+        if self.StaticData and not self.DynamicData:
             raw_file_names_list = ['S1_attention_1_1m_upper.npy', 'S6_stop_2_4m_full.npy']
             if self.alsoDownloadVideos:
                 raw_file_names_list.append(os.path.join('videos', 'S1_attention_1_1m_upper.avi'))
             return raw_file_names_list
-        else:
+        elif self.DynamicData and not self.StaticData:
             raw_file_names_list = ['S1_continue_3_6m_full.npy', 'S10_turnback_1_1m_upper.npy']
             if self.alsoDownloadVideos:
                 raw_file_names_list.append(os.path.join('videos', 'S1_continue_3_6m_full.avi'))
+            return raw_file_names_list
+        else:
+            raw_file_names_list = ['S1_attention_1_1m_upper.npy', 'S10_turnback_1_1m_upper.npy']
+            if self.alsoDownloadVideos:
+                raw_file_names_list.append(os.path.join('videos', 'S1_continue_3_6m_full.avi'))
+                raw_file_names_list.append(os.path.join('videos', 'S1_attention_1_1m_upper.avi'))
             return raw_file_names_list
 
     @property
@@ -228,18 +234,19 @@ class IRIGestureTemporal(InMemoryDataset):
                     ".npy" in content.name or (self.alsoDownloadVideos and ".avi" in content.name)):
                 try:
                     path = content.path
-                    if (self.StaticData and (("3Djoints" in path)
-                                             or ("videos" in path and not ("dynamic_videos" in path)))) \
-                            or (self.DynamicData and ("dynamic" in path)):
-                        file_name = content_prefix + "_" + content.name
-                        file_content = repository.get_contents(path)
-                        file_data = base64.b64decode(file_content.content)
-                        if ".avi" in content.name:
-                            file_out = open(os.path.join(local_path, "videos", file_name), "wb")
-                        else:
-                            file_out = open(os.path.join(local_path, file_name), "wb")
-                        file_out.write(file_data)
-                        file_out.close()
+                    if self.__categories.__contains__(content.name.split("_")[0]):
+                        if (self.StaticData and (("3Djoints" in path)
+                                                 or ("videos" in path and not ("dynamic_videos" in path)))) \
+                                or (self.DynamicData and ("dynamic" in path)):
+                            file_name = content_prefix + "_" + content.name
+                            file_content = repository.get_contents(path)
+                            file_data = base64.b64decode(file_content.content)
+                            if ".avi" in content.name:
+                                file_out = open(os.path.join(local_path, "videos", file_name), "wb")
+                            else:
+                                file_out = open(os.path.join(local_path, file_name), "wb")
+                            file_out.write(file_data)
+                            file_out.close()
 
                 except (GithubException, IOError) as exc:
                     print('Error downloading %s: %s', content.path, exc)
