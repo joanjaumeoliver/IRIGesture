@@ -114,8 +114,7 @@ DEVICE = torch.device('cpu')
 shuffle = True
 batch_size = 32
 
-loader = IRIGestureTemporal(os.path.join(Path().absolute(), 'dataset'), dataTypes="Static",
-                            categories=['attention', 'right', 'left', 'stop', 'yes', 'shrug'])
+loader = IRIGestureTemporal(os.path.join(Path().absolute(), 'dataset'), dataTypes="All")
 dataset = loader.get_all_dataset()
 dataset.shuffle()
 train_dataset, test_dataset = tools.temporal_dataset_split(dataset, train_ratio=0.95)
@@ -131,7 +130,7 @@ train_loader = tools.create_data_loaders(train_dataset, batch_size, shuffle, DEV
 test_loader = tools.create_data_loaders(test_dataset, batch_size, shuffle, DEVICE)
 
 # Create model and optimize
-model = Classifier(edge_index=train_dataset.get_static_edge_index().to(DEVICE))
+model = Classifier(edge_index=train_dataset.get_static_edge_index().to(DEVICE), out_channels=len(loader.categories))
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
