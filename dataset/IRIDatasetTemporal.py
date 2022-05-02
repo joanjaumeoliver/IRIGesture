@@ -87,7 +87,7 @@ class IRIGestureTemporal(InMemoryDataset):
 
     __categories = []
     __categoriesStatic = ['attention', 'right', 'left', 'stop', 'yes', 'shrug']  # , 'static', 'random']
-    __categoriesDynamic = ['greeting', 'continue', 'turnback', 'no', 'slowdown', 'come', 'back']
+    __categoriesDynamic = ['greeting', 'continue', 'turnback', 'no', 'slowdown', 'come']  # , 'back']
 
     __nodes_to_use = [0,  # nose
                       # 1,       # left_eye_inner
