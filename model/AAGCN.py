@@ -21,13 +21,13 @@ class GraphAAGCN:
             * **A** (PyTorch Float Tensor) - Three layer normalized adjacency matrix
     """
 
-    def __init__(self, edge_index: list, num_nodes: int):
+    def __init__(self, edge_index: list, num_nodes: int, device: str):
         self.num_nodes = num_nodes
         self.edge_index = edge_index
-        self.A = self.get_spatial_graph(self.num_nodes)
+        self.A = self.get_spatial_graph(self.num_nodes, device)
 
-    def get_spatial_graph(self, num_nodes):
-        self_mat = torch.eye(num_nodes)
+    def get_spatial_graph(self, num_nodes, device):
+        self_mat = torch.eye(num_nodes).to(device)
         inward_mat = torch.squeeze(to_dense_adj(self.edge_index))
         inward_mat_norm = F.normalize(inward_mat, dim=0, p=1)
         outward_mat = inward_mat.transpose(0, 1)
@@ -298,12 +298,13 @@ class AAGCN(nn.Module):
             residual: bool = True,
             adaptive: bool = True,
             attention: bool = True,
+            device: str = 'cpu'
     ):
         super(AAGCN, self).__init__()
         self.edge_index = edge_index
         self.num_nodes = num_nodes
 
-        self.graph = GraphAAGCN(self.edge_index, self.num_nodes)
+        self.graph = GraphAAGCN(self.edge_index, self.num_nodes, device)
         self.A = self.graph.A
 
         self.gcn1 = UnitGCN(
@@ -349,12 +350,12 @@ class Classifier(nn.Module):
             out_channels: int = 8,
             num_nodes: int = 15,
             num_subsets: int = 15,
-            device: torch.device = torch.device('CPU'),
+            device: str = 'cpu',
     ):
         super(Classifier, self).__init__()
         # For loop
         self.initialAAGCN = AAGCN(in_channels, 64, edge_index, num_nodes,
-                                  stride=1, residual=True, adaptive=True, attention=True).to(device)
+                                  stride=1, residual=True, adaptive=True, attention=True, device=device)
 
         self.middleAAGCN = nn.ModuleList()
         for i in range(num_subsets):
