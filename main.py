@@ -18,8 +18,8 @@ def train(categories: typing.List[str], tensorboard_name: str):
     step = 0
     loss_list = []
     acc_list = []
-    total_guesses = torch.zeros(0)
-    total_labels = torch.zeros(0)
+    total_guesses = torch.zeros(0).to(DEVICE)
+    total_labels = torch.zeros(0).to(DEVICE)
     for encoder_inputs, labels, paths_idx in train_loader:
         total_labels = torch.cat((total_labels, labels))
 
@@ -70,8 +70,8 @@ def test(dataset_videos_paths: typing.List[str], categories: typing.List[str]):
     # Store for analysis
     total_loss = []
     total_acc = []
-    total_guesses = torch.zeros(0)
-    total_labels = torch.zeros(0)
+    total_guesses = torch.zeros(0).to(DEVICE)
+    total_labels = torch.zeros(0).to(DEVICE)
     for encoder_inputs, labels, paths_idx in test_loader:
         # Get model predictions
         total_labels = torch.cat((total_labels, labels))
@@ -133,6 +133,7 @@ test_loader = tools.create_data_loaders(test_dataset, batch_size, shuffle, DEVIC
 # Create model and optimize
 model = Classifier(edge_index=train_dataset.get_static_edge_index().to(DEVICE), out_channels=len(loader.categories),
                    device=DEVICE.type)
+model.to(DEVICE)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
@@ -149,7 +150,7 @@ while True:
     if epoch < max_epochs:
         train(categories=loader.categories, tensorboard_name=run_name)
         epoch += 1
-        if epoch % 1 == 0:
+        if epoch % 25 == 0:
             test(dataset_videos_paths=test_dataset.videos_paths,
                  categories=loader.categories)
             model.train()
