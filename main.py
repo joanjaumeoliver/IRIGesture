@@ -3,7 +3,8 @@ import random
 import typing
 from pathlib import Path
 
-import numpy as np
+import sys
+
 import torch
 import torch.nn.functional
 from torch.utils.tensorboard import SummaryWriter
@@ -110,11 +111,11 @@ def test(dataset_videos_paths: typing.List[str], categories: typing.List[str]):
 
 tools.seed_everything()
 
-DEVICE = torch.device('cpu')
+DEVICE = torch.device(sys.argv[1])
 shuffle = True
 batch_size = 32
 
-loader = IRIGestureTemporal(os.path.join(Path().absolute(), 'dataset'), dataTypes="All")
+loader = IRIGestureTemporal(os.path.join(Path().absolute(), 'dataset'), dataTypes="All", token=sys.argv[2])
 dataset = loader.get_all_dataset()
 dataset.shuffle()
 train_dataset, test_dataset = tools.temporal_dataset_split(dataset, train_ratio=0.95)
