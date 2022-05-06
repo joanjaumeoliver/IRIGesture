@@ -130,7 +130,8 @@ train_loader = tools.create_data_loaders(train_dataset, batch_size, shuffle, DEV
 test_loader = tools.create_data_loaders(test_dataset, batch_size, shuffle, DEVICE)
 
 # Create model and optimize
-model = Classifier(edge_index=train_dataset.get_static_edge_index().to(DEVICE), out_channels=len(loader.categories))
+model = Classifier(edge_index=train_dataset.get_static_edge_index().to(DEVICE), out_channels=len(loader.categories),
+                   device=DEVICE)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)

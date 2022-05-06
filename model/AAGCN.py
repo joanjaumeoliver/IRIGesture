@@ -349,11 +349,12 @@ class Classifier(nn.Module):
             out_channels: int = 8,
             num_nodes: int = 15,
             num_subsets: int = 15,
+            device: torch.device = torch.device('CPU'),
     ):
         super(Classifier, self).__init__()
         # For loop
         self.initialAAGCN = AAGCN(in_channels, 64, edge_index, num_nodes,
-                                  stride=1, residual=True, adaptive=True, attention=True)
+                                  stride=1, residual=True, adaptive=True, attention=True).to(device)
 
         self.middleAAGCN = nn.ModuleList()
         for i in range(num_subsets):
