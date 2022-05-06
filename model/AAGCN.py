@@ -28,7 +28,7 @@ class GraphAAGCN:
 
     def get_spatial_graph(self, num_nodes, device):
         self_mat = torch.eye(num_nodes).to(device)
-        inward_mat = torch.squeeze(to_dense_adj(self.edge_index))
+        inward_mat = torch.squeeze(to_dense_adj(self.edge_index)).to(device)
         inward_mat_norm = F.normalize(inward_mat, dim=0, p=1)
         outward_mat = inward_mat.transpose(0, 1)
         outward_mat_norm = F.normalize(outward_mat, dim=0, p=1)
