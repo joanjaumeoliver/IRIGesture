@@ -17,10 +17,10 @@ def train(categories: typing.List[str], tensorboard_name: str):
     step = 0
     loss_list = []
     acc_list = []
-    total_guesses = np.zeros(0)
-    total_labels = np.zeros(0)
+    total_guesses = torch.zeros(0)
+    total_labels = torch.zeros(0)
     for encoder_inputs, labels, paths_idx in train_loader:
-        total_labels = np.concatenate((total_labels, labels.numpy()))
+        total_labels = torch.cat((total_labels, labels))
 
         optimizer.zero_grad()
         y_hat = model(encoder_inputs)  # Get model predictions
@@ -34,10 +34,10 @@ def train(categories: typing.List[str], tensorboard_name: str):
         # Softmax is implicit in Loss but not in Acc
         y_hat_softmax = torch.softmax(y_hat, dim=1)
         guessed_list = torch.argmax(y_hat_softmax, dim=1)
-        total_guesses = np.concatenate((total_guesses, guessed_list.numpy()))
+        total_guesses = torch.cat((total_guesses, guessed_list))
         corrects = torch.flatten((guessed_list == labels).float())
         acc = corrects.sum() / len(corrects)
-        acc_list.append(acc.numpy())
+        acc_list.append(acc.item())
 
         if step % 5 == 0:
             print("Loss = " + str(sum(loss_list) / len(loss_list)))
@@ -69,11 +69,11 @@ def test(dataset_videos_paths: typing.List[str], categories: typing.List[str]):
     # Store for analysis
     total_loss = []
     total_acc = []
-    total_guesses = np.zeros(0)
-    total_labels = np.zeros(0)
+    total_guesses = torch.zeros(0)
+    total_labels = torch.zeros(0)
     for encoder_inputs, labels, paths_idx in test_loader:
         # Get model predictions
-        total_labels = np.concatenate((total_labels, labels.numpy()))
+        total_labels = torch.cat((total_labels, labels))
         y_hat = model(encoder_inputs)
         # Mean squared error
         loss = loss_fn(y_hat.float(), labels.long())
@@ -81,18 +81,18 @@ def test(dataset_videos_paths: typing.List[str], categories: typing.List[str]):
 
         y_hat_softmax = torch.softmax(y_hat, dim=1)
         guessed_list = torch.argmax(y_hat_softmax, dim=1)
-        total_guesses = np.concatenate((total_guesses, guessed_list.numpy()))
+        total_guesses = torch.cat((total_guesses, guessed_list))
         corrects_list = (guessed_list == labels).float()
         corrects = torch.flatten(corrects_list)
         acc = corrects.sum() / len(corrects)
-        total_acc.append(acc.numpy())
+        total_acc.append(acc.item())
 
         video_idx = random.choice(paths_idx.tolist())
-        idx = np.where(paths_idx.numpy() == video_idx)
+        idx = (paths_idx == video_idx).nonzero(as_tuple=True)[0]
         video_path = dataset_videos_paths[video_idx]
         video_name = os.path.splitext(os.path.basename(video_path))[0]
-        video_label = categories[int(labels.numpy()[idx])]
-        guessed_label = categories[int(guessed_list.numpy()[idx])]
+        video_label = categories[int(labels[idx])]
+        guessed_label = categories[int(guessed_list[idx])]
 
         writer.add_video(f'{video_label}/{video_name}', tools.read_video(video_path), batch)
         writer.add_text(f'{video_label}/{video_name}',
@@ -131,7 +131,7 @@ test_loader = tools.create_data_loaders(test_dataset, batch_size, shuffle, DEVIC
 
 # Create model and optimize
 model = Classifier(edge_index=train_dataset.get_static_edge_index().to(DEVICE), out_channels=len(loader.categories),
-                   device=DEVICE)
+                   device=DEVICE.type)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
@@ -148,7 +148,7 @@ while True:
     if epoch < max_epochs:
         train(categories=loader.categories, tensorboard_name=run_name)
         epoch += 1
-        if epoch % 25 == 0:
+        if epoch % 1 == 0:
             test(dataset_videos_paths=test_dataset.videos_paths,
                  categories=loader.categories)
             model.train()
