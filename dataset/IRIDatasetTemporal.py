@@ -143,7 +143,7 @@ class IRIGestureTemporal(InMemoryDataset):
         self.__testSubject = testSubject
         self.alsoDownloadVideos = True
 
-        self.__token = os.environ.get("GITHUB_TOKEN", None) if token is None else token
+        self.__token = token
 
         if categories is not None:
             categories = [gestures.lower() for gestures in categories]
