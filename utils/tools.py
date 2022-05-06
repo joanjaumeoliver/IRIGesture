@@ -35,7 +35,7 @@ def read_video(video_path: str) -> torch.Tensor:
 
 def create_confusion_matrix(y_pred, y_true, classes, title):
     # Build confusion matrix
-    cf_matrix = confusion_matrix(y_true, y_pred, labels=[*range(len(classes))], normalize='true')
+    cf_matrix = confusion_matrix(y_true.cpu(), y_pred.cpu(), labels=[*range(len(classes))], normalize='true')
     df_cm = pd.DataFrame(cf_matrix / np.sum(cf_matrix) * 10, index=[i for i in classes],
                          columns=[i for i in classes])
     s = sn.heatmap(df_cm, annot=True)
