@@ -166,6 +166,7 @@ class IRIGestureTemporal(InMemoryDataset):
         # Video configurations
         self.number_frames = 30
         self.frames_gap = 3
+        self.frames_offset = 15  # 0,7 s at 22 fps
 
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
@@ -283,7 +284,7 @@ class IRIGestureTemporal(InMemoryDataset):
             for path in paths:
                 is_test_subject = path.__contains__(self.__testSubject)
                 gesture_seq = np.load(path, allow_pickle=True)
-                number_of_sequences = (gesture_seq.shape[0] - self.number_frames) // self.frames_gap
+                number_of_sequences = ((gesture_seq.shape[0] - self.frames_offset) - self.number_frames) // self.frames_gap
 
                 video_name = None
                 input_video = None
@@ -293,7 +294,7 @@ class IRIGestureTemporal(InMemoryDataset):
 
                 for seq in range(0, number_of_sequences):
                     x = np.empty([self.number_nodes, 4, 0])
-                    init_frame = seq * self.frames_gap
+                    init_frame = seq * self.frames_gap + self.frames_offset
                     end_frame = init_frame + self.number_frames
 
                     output_video = None
