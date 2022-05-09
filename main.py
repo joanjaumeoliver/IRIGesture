@@ -115,6 +115,7 @@ DEVICE = torch.device(sys.argv[1])
 shuffle = True
 batch_size = 32
 
+run_name = f'{input("Add TensorBoard RUN Name")}'
 loader = IRIGestureTemporal(os.path.join(Path().absolute(), 'dataset'), dataTypes="All", token=sys.argv[2])
 dataset = loader.get_all_dataset()
 dataset.shuffle()
@@ -139,7 +140,6 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 loss_fn = torch.nn.CrossEntropyLoss()
 
-run_name = f'{input("Add TensorBoard RUN Name")}'
 tools.clear_path(os.path.join(Path().absolute(), 'checkpoints', f'{run_name}_Checkpoints'))
 writer = SummaryWriter(log_dir=os.path.join('tensorboard/runs', run_name))
 
