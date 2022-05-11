@@ -47,21 +47,24 @@ def train(categories: typing.List[str], tensorboard_name: str):
     print("Epoch {} train CrossEntropyLoss: {:.4f} Acc: {:.4f}".format(epoch, sum(loss_list) / len(loss_list),
                                                                        sum(acc_list) / len(acc_list)))
 
-    writer.add_figure("TrainConfusionMatrix", tools.create_confusion_matrix(total_guesses, total_labels, categories,
-                                                                            f'Train-Epoch:{epoch}'), epoch)
+    if epoch % 100 == 0:
+        writer.add_figure("TrainConfusionMatrix", tools.create_confusion_matrix(total_guesses, total_labels, categories,
+                                                                                f'Train-Epoch:{epoch}'), epoch)
     writer.add_scalar('Loss/Train', sum(loss_list) / len(loss_list), epoch)
     writer.add_scalar('Accuracy/Train', sum(acc_list) / len(acc_list), epoch)
 
-    for idx, p in enumerate(model.parameters()):
-        if p.grad is not None:
-            writer.add_scalar(f'TrainGradients/grad_{idx}', p.grad.norm(), epoch)
+    if tensorboard_adv_mode:
+        for idx, p in enumerate(model.parameters()):
+            if p.grad is not None:
+                writer.add_scalar(f'TrainGradients/grad_{idx}', p.grad.norm(), epoch)
 
-    writer.add_hparams({'lr': scheduler.get_last_lr()[0]},
-                       {'accuracy': sum(acc_list) / len(acc_list),
-                        'loss': sum(loss_list) / len(loss_list)})
+        writer.add_hparams({'lr': scheduler.get_last_lr()[0]},
+                           {'accuracy': sum(acc_list) / len(acc_list),
+                            'loss': sum(loss_list) / len(loss_list)})
 
-    torch.save(model.state_dict(), os.path.join(Path().absolute(), 'checkpoints', f'{tensorboard_name}_Checkpoints',
-                                                'Epoch_' + str(epoch) + '.pth'))
+    if model_save:
+        torch.save(model.state_dict(), os.path.join(Path().absolute(), 'checkpoints', f'{tensorboard_name}_Checkpoints',
+                                                    'Epoch_' + str(epoch) + '.pth'))
 
 
 def test(dataset_videos_paths: typing.List[str], categories: typing.List[str]):
@@ -88,23 +91,26 @@ def test(dataset_videos_paths: typing.List[str], categories: typing.List[str]):
         acc = corrects.sum() / len(corrects)
         total_acc.append(acc.item())
 
-        video_idx = random.choice(paths_idx.tolist())
-        idx = (paths_idx == video_idx).nonzero(as_tuple=True)[0]
-        video_path = dataset_videos_paths[video_idx]
-        video_name = os.path.splitext(os.path.basename(video_path))[0]
-        video_label = categories[int(labels[idx])]
-        guessed_label = categories[int(guessed_list[idx])]
+        if tensorboard_adv_mode:
+            video_idx = random.choice(paths_idx.tolist())
+            idx = (paths_idx == video_idx).nonzero(as_tuple=True)[0]
+            video_path = dataset_videos_paths[video_idx]
+            video_name = os.path.splitext(os.path.basename(video_path))[0]
+            video_label = categories[int(labels[idx])]
+            guessed_label = categories[int(guessed_list[idx])]
 
-        writer.add_video(f'{video_label}/{video_name}', tools.read_video(video_path), batch)
-        writer.add_text(f'{video_label}/{video_name}',
-                        f'Guessed {guessed_label}', batch)
+            writer.add_video(f'{video_label}/{video_name}', tools.read_video(video_path), batch)
+            writer.add_text(f'{video_label}/{video_name}',
+                            f'Guessed {guessed_label}', batch)
 
         batch += 1
 
     print('Test CrossEntropyLoss: {:.4f} Acc: {:.4f}'.format(sum(total_loss) / len(total_loss),
                                                              sum(total_acc) / len(total_acc)))
-    writer.add_figure("TestConfusionMatrix", tools.create_confusion_matrix(total_guesses, total_labels, categories,
-                                                                           f'Test-Epoch:{epoch}'), epoch)
+
+    if tensorboard_adv_mode:
+        writer.add_figure("TestConfusionMatrix", tools.create_confusion_matrix(total_guesses, total_labels, categories,
+                                                                               f'Test-Epoch:{epoch}'), epoch)
     writer.add_scalar('Loss/Test', sum(total_loss) / len(total_loss), epoch)
     writer.add_scalar('Accuracy/Test', sum(total_acc) / len(total_acc), epoch)
 
@@ -112,6 +118,8 @@ def test(dataset_videos_paths: typing.List[str], categories: typing.List[str]):
 tools.seed_everything()
 
 DEVICE = torch.device(sys.argv[1])
+tensorboard_adv_mode = sys.argv[3]  # True False
+model_save = sys.argv[4]  # True False
 shuffle = True
 batch_size = 32
 
