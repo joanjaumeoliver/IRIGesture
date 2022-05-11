@@ -121,7 +121,7 @@ DEVICE = torch.device(sys.argv[1])
 tensorboard_adv_mode = sys.argv[3]  # True False
 model_save = sys.argv[4]  # True False
 shuffle = True
-batch_size = 32
+batch_size = 128
 
 run_name = f'{input("Add TensorBoard RUN Name")}'
 loader = IRIGestureTemporal(os.path.join(Path().absolute(), 'dataset'), dataTypes="All", token=sys.argv[2])
@@ -137,7 +137,7 @@ print("Number of test buckets: ", len(set(test_dataset)))
 
 # Creating Data loaders
 train_loader = tools.create_data_loaders(train_dataset, batch_size, shuffle, DEVICE)
-test_loader = tools.create_data_loaders(test_dataset, batch_size, shuffle, DEVICE)
+test_loader = tools.create_data_loaders(test_dataset, 32, shuffle, DEVICE)
 
 # Create model and optimize
 model = Classifier(edge_index=train_dataset.get_static_edge_index().to(DEVICE), out_channels=len(loader.categories),
