@@ -2,6 +2,7 @@ import os
 import shutil
 from typing import List, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sn
@@ -38,6 +39,8 @@ def create_confusion_matrix(y_pred, y_true, classes, title):
     cf_matrix = confusion_matrix(y_true.cpu(), y_pred.cpu(), labels=[*range(len(classes))], normalize='true')
     df_cm = pd.DataFrame(cf_matrix / np.sum(cf_matrix) * 10, index=[i for i in classes],
                          columns=[i for i in classes])
+    if classes > 8:
+        sn.set(rc={'figure.figsize': (12, 8)})
     s = sn.heatmap(df_cm, annot=True)
     s.set(title=title)
     return s.get_figure()
